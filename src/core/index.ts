@@ -4,6 +4,7 @@ export { createTextDoc, getPlainText, isRichText } from './rich-text';
 export { selectChildIds, selectChildren, selectEdgesForNode, selectNode, selectPath, selectSubtree } from './selectors';
 export { createCoreStore } from './store';
 export { repairDoc, validateDoc } from './validation';
+export type { CoreStore } from './store';
 export type {
   AddFreeEdgeOp,
   ApplyContext,

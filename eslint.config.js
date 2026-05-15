@@ -118,7 +118,13 @@ export default tseslint.config(
     languageOptions: {
       globals: {
         process: 'readonly',
-        console: 'readonly'
+        console: 'readonly',
+        document: 'readonly',
+        fetch: 'readonly',
+        performance: 'readonly',
+        requestAnimationFrame: 'readonly',
+        setTimeout: 'readonly',
+        WheelEvent: 'readonly'
       }
     },
     rules: {

@@ -13,7 +13,8 @@
     "test:watch": "vitest",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
-    "bench:fixtures": "node scripts/generate-benchmark-fixtures.mjs"
+    "bench:fixtures": "node scripts/generate-benchmark-fixtures.mjs",
+    "bench:browser": "node scripts/run-spike-benchmark.mjs"
   },
   "dependencies": {
     "@tiptap/core": "^3.23.4",
