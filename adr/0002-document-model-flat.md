@@ -94,7 +94,7 @@ interface Node {
 
 **Mitigations**
 
-- All mutations go through `core.applyOp(doc, op)`. No component is allowed to mutate `doc.nodes` directly.
+- All mutations go through `core.applyDocOp(doc, op, context)`. No component is allowed to mutate `doc.nodes` directly.
 - Validation pass on import / load asserts every `parentId` ↔ `childIds` pair is consistent and fixes drift.
 - `core/select.ts` memoizes derived views (`childrenOf`, `pathTo`, `subtreeOf`) keyed on the relevant slice.
 - The selection-sync mechanism is the most important spike deliverable — see [DESIGN §3](../docs/DESIGN.md#3-v01-spike-validate-the-lynchpin).
@@ -118,7 +118,7 @@ interface Node {
 
 **缓解措施**
 
-- 所有变更走 `core.applyOp(doc, op)`。任何组件都不允许直接 mutate `doc.nodes`。
+- 所有变更走 `core.applyDocOp(doc, op, context)`。任何组件都不允许直接 mutate `doc.nodes`。
 - 导入 / 加载时做校验，断言每对 `parentId` ↔ `childIds` 一致并修正漂移。
 - `core/select.ts` 对派生视图（`childrenOf`、`pathTo`、`subtreeOf`）按相关切片做 memo。
 - 选区同步机制是 spike 最重要的交付物——见 [DESIGN §3](../docs/DESIGN.zh-CN.md#3-v01-spike验证命门)。

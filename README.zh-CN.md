@@ -30,7 +30,7 @@ MindForge 是一个开源思维导图编辑器，目标是：
 
 TypeScript · React 19 · Vite · Tiptap (ProseMirror) · Zustand（后续切 CRDT）· Tailwind v4 · Tauri 2（桌面端）· 单包 Vite app。
 
-完整架构、决策、路线图见 [`docs/DESIGN.zh-CN.md`](./docs/DESIGN.zh-CN.md)。AI / vibe coding 执行规则见 [`AGENTS.md`](./AGENTS.md) 和 [`docs/VIBE_CODING_RULES.zh-CN.md`](./docs/VIBE_CODING_RULES.zh-CN.md)。
+完整架构、决策、路线图见 [`docs/DESIGN.zh-CN.md`](./docs/DESIGN.zh-CN.md)。spike、状态模型和 core API 规格见 [`docs/SPIKE_PLAN.zh-CN.md`](./docs/SPIKE_PLAN.zh-CN.md)、[`docs/STATE_MODEL.zh-CN.md`](./docs/STATE_MODEL.zh-CN.md)、[`docs/CORE_API.zh-CN.md`](./docs/CORE_API.zh-CN.md)。AI / vibe coding 执行规则见 [`AGENTS.md`](./AGENTS.md) 和 [`docs/VIBE_CODING_RULES.zh-CN.md`](./docs/VIBE_CODING_RULES.zh-CN.md)。
 
 ## 路线图
 

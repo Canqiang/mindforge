@@ -1,7 +1,7 @@
 # MindForge Agent Rules
 
 This file is the execution contract for AI coding agents working in this repo.
-Read `docs/DESIGN.zh-CN.md` and the ADRs before making architecture-level changes.
+Read `docs/DESIGN.zh-CN.md`, `docs/SPIKE_PLAN.zh-CN.md`, `docs/STATE_MODEL.zh-CN.md`, `docs/CORE_API.zh-CN.md`, and the ADRs before making architecture-level changes.
 
 ## Current Phase
 
@@ -12,9 +12,9 @@ Read `docs/DESIGN.zh-CN.md` and the ADRs before making architecture-level change
 ## Non-Negotiable Rules
 
 1. Keep the repo as one package. Do not introduce a monorepo, Turborepo, or package publishing setup unless ADR-0005 is revised.
-2. All document mutations must go through `core.applyOp(...)`. Components, render code, outline code, and AI code must never mutate `doc.nodes`, `doc.edges`, or `childIds` directly.
+2. All document mutations must go through `core.applyDocOp(...)` or `core.applyDocTransaction(...)`. Components, render code, outline code, and AI code must never mutate `doc.nodes`, `doc.edges`, or `childIds` directly.
 3. Treat `parentId` and `childIds` as one invariant. Any operation that changes one must update and validate the other.
-4. ProseMirror JSON only shares node content. Cursor and selection sync are explicit engineering work, not a side effect of shared JSON.
+4. ProseMirror JSON only shares node content. Cursor and selection sync live in ViewState / EditorBridgeState and are explicit engineering work, not a side effect of shared JSON.
 5. AI output must become validated candidate operations before it touches the document. Never let model text directly patch the doc.
 6. Local-first and privacy are product constraints. Do not add document-content telemetry. Cloud AI calls require BYO key and explicit user action.
 7. Layout code must be deterministic and side-effect free. DOM measurement belongs in `render`, not in `layout`.

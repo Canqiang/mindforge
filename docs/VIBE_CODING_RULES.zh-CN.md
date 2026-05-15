@@ -15,7 +15,7 @@ MindForge 还在 pre-alpha。v0.1-release 之前，所有代码都必须服从 `
 ## 2. 不可破坏的不变量
 
 1. **单包优先。** 仓库保持一个 `package.json`、一个 Vite app。不得擅自引入 monorepo、Turborepo、独立 package 发布结构；需要改先修订 ADR-0005。
-2. **`Operation` 是唯一写入口。** 所有文档变更必须走 `core.applyOp(...)`。React 组件、outline、render、AI、IO 都不能直接改 `doc.nodes`、`doc.edges`、`childIds`。
+2. **`DocOperation` 是唯一文档写入口。** 所有文档变更必须走 `core.applyDocOp(...)` 或 `core.applyDocTransaction(...)`。React 组件、outline、render、AI、IO 都不能直接改 `doc.nodes`、`doc.edges`、`childIds`。
 3. **`parentId` / `childIds` 必须一致。** 任何移动、插入、删除都必须同时维护双向关系，并通过 `core/validate` 校验。
 4. **ProseMirror JSON 只共享正文。** 光标和选区不是 JSON 的一部分，必须显式设计 transaction / origin / selection 映射。
 5. **AI 只能生成候选操作。** 模型输出必须转成结构化 candidate ops，经过 schema 校验、业务校验，再 apply。不得让自然语言或任意 JSON 直接 patch 文档。
@@ -27,41 +27,24 @@ MindForge 还在 pre-alpha。v0.1-release 之前，所有代码都必须服从 `
 
 ## 3. 模块边界
 
-`src/core/`
-: 文档 schema、ops、validate、undo/redo、store。除 store 实现外不依赖 UI。只有这里允许 import `zustand`。
-
-`src/layout/`
-: 纯布局算法。可以 import core 类型 / selector。不得 import DOM、React、Zustand、Tiptap、AI。
-
-`src/render/`
-: canvas、DOM node、SVG edge、viewport、measurement、minimap。可以消费 core / layout / theme / ui。
-
-`src/outline/`
-: Tiptap 大纲和 transaction 映射。可以消费 core。所有镜像 transaction 必须带 `origin`，防止回环。
-
-`src/ai/`
-: provider 适配、prompt、structured generation。只能输出候选 ops，不能直接改 doc。
-
-`src/io/`
-: import / export、schema migration、fixture round trip。必须复用 core validation。
-
-`src/theme/`
-: CSS 变量和主题预设。组件里避免写死主题色。
-
-`src/ui/`
-: 通用 UI 原语。不得 import app 状态。
-
-`src/app.tsx`
-: composition root，只负责组装模块，不承载业务逻辑。
+- `src/core/`：文档 schema、DocOperation、validate、undo/redo、store。除 store 实现外不依赖 UI。只有这里允许 import `zustand`。详见 [`CORE_API.zh-CN.md`](./CORE_API.zh-CN.md)。
+- `src/layout/`：纯布局算法。可以 import core 类型 / selector。不得 import DOM、React、Zustand、Tiptap、AI。
+- `src/render/`：canvas、DOM node、SVG edge、viewport、measurement、minimap。可以消费 core / layout / theme / ui。
+- `src/outline/`：Tiptap 大纲和 transaction 映射。可以消费 core。所有镜像 transaction 必须带 `origin`，防止回环。
+- `src/ai/`：provider 适配、prompt、structured generation。只能输出候选 ops，不能直接改 doc。
+- `src/io/`：import / export、schema migration、fixture round trip。必须复用 core validation。
+- `src/theme/`：CSS 变量和主题预设。组件里避免写死主题色。
+- `src/ui/`：通用 UI 原语。不得 import app 状态。
+- `src/app.tsx`：composition root，只负责组装模块，不承载业务逻辑。
 
 每个模块只有 `src/<module>/index.ts` 是公开入口。跨模块优先从入口 import，不要深挖私有文件。
 
 ## 4. Core / Ops 规则
 
-- 每个 op 必须定义：输入、前置校验、状态变更、inverse op、是否进入 undo stack。
+- 每个 DocOperation 必须定义：输入、前置校验、状态变更、inverse op、是否进入 undo stack。
 - 删除节点必须处理整棵子树，并删除相关 `FreeEdge`。
 - 移动节点必须拒绝循环、拒绝把节点移动到自己的后代下面、拒绝重复 child id。
-- `setSelection` 属于 UI / editor state。默认不进入内容 undo stack，除非有明确交互理由。
+- `setSelection` 属于 `ViewOperation` / editor state，不是 `DocOperation`。默认不进入内容 undo stack，除非有明确交互理由。
 - `rootId` 对应节点的 `parentId` 必须是 `null`，且文档只能有一个 root。
 - import / load 后必须跑一次完整 validation。
 
@@ -70,6 +53,7 @@ MindForge 还在 pre-alpha。v0.1-release 之前，所有代码都必须服从 `
 - 不允许写“共享 ProseMirror JSON 所以光标自然同步”这种假设。
 - 所有同步都要带 `origin`：`canvas`、`outline`、`ai`、`io`、`history`、`remote`。
 - IME 输入、composition event、快速连续输入必须作为 spike 验收项。
+- selection / cursor 的状态归属见 [`STATE_MODEL.zh-CN.md`](./STATE_MODEL.zh-CN.md)。
 - spike 阶段可以实验“每节点一个 Tiptap 实例”，但没有 benchmark 前不得把它固化为 release 架构。
 - 如果选择单 Tiptap / shared editor / Y.XmlFragment 方案，必须把原因写入 ADR。
 
@@ -78,7 +62,7 @@ MindForge 还在 pre-alpha。v0.1-release 之前，所有代码都必须服从 `
 - 坐标系统集中定义，不要在各组件里散落 viewport transform 计算。
 - DOM measurement 只在 render 层做，结果以稳定结构传给 layout。
 - layout 输出必须 deterministic：相同 doc + 相同尺寸输入，输出相同坐标。
-- 大图性能不能靠感觉判断。100 / 500 / 1000 / 2000 节点都要有 benchmark。
+- 大图性能不能靠感觉判断。100 / 500 / 1000 / 2000 节点都要有 benchmark，指标见 [`SPIKE_PLAN.zh-CN.md`](./SPIKE_PLAN.zh-CN.md)。
 - SVG edge 的坐标必须从同一套 layout / measurement 数据来，不得各自 `getBoundingClientRect` 拼凑。
 - 缩放下文字渲染质量是 spike 风险，不要在没有截图 / benchmark 前拍脑袋决定。
 
@@ -92,20 +76,11 @@ MindForge 还在 pre-alpha。v0.1-release 之前，所有代码都必须服从 `
 
 ## 8. 测试和验收
 
-新增 op：
-: Vitest 覆盖成功路径、失败路径、validation、undo / redo。
-
-新增 layout 行为：
-: fixture 测试 + deterministic snapshot。影响性能时补 benchmark。
-
-新增 outline / canvas 同步：
-: Playwright 覆盖打字、选区、滚动位置、焦点切换。IME 场景至少有手工验收记录。
-
-新增 import / export：
-: round-trip fixture，不允许静默丢字段。
-
-新增 AI 行为：
-: schema 测试、provider fallback 测试、模型输出非法时的失败路径。
+- 新增 op：Vitest 覆盖成功路径、失败路径、validation、undo / redo。
+- 新增 layout 行为：fixture 测试 + deterministic snapshot。影响性能时补 benchmark。
+- 新增 outline / canvas 同步：Playwright 覆盖打字、选区、滚动位置、焦点切换。IME 场景至少有手工验收记录。
+- 新增 import / export：round-trip fixture，不允许静默丢字段。
+- 新增 AI 行为：schema 测试、provider fallback 测试、模型输出非法时的失败路径。
 
 每次完成任务前至少运行相关测试；如果没法运行，要在交付说明里写清楚原因。
 

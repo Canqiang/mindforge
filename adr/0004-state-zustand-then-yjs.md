@@ -65,18 +65,18 @@ So the goal is not "drop-in", it is: **the op-based mutation API stays the same;
 ### English
 
 - **Phase 1 (v0.1 – v0.2):** Zustand + Immer holds `Doc` and ephemeral UI state.
-- **Public API is `core.applyOp(op)` + scoped selectors** — never expose the Zustand store directly to consumers.
+- **Public API is `core.applyDocOp(op)` + scoped selectors** — never expose the Zustand store directly to consumers.
 - **Phase 2 (v0.3):** Replace the Zustand store internals with `Y.Doc` (or Loro — final pick made during v0.2 based on stability and ergonomics at that time). The `core` op API stays the same. Undo and awareness APIs grow.
 
 ```ts
 // core/store.ts — single mutation entrypoint, regardless of backend
 export interface CoreStore {
-  doc: Doc;
-  applyOp(op: Operation, origin?: OpOrigin): void;  // origin = forward-compat for CRDT
-  undo(scope?: 'local' | 'global'): void;           // scope = explicit for forward-compat
-  redo(scope?: 'local' | 'global'): void;
+  applyDocOp(op: DocOperation, origin: OpOrigin): ApplyResult;  // origin = forward-compat for CRDT
+  applyDocTransaction(ops: DocOperation[], origin: OpOrigin): ApplyResult;
+  undo(scope?: 'local' | 'global'): ApplyResult;                 // scope = explicit for forward-compat
+  redo(scope?: 'local' | 'global'): ApplyResult;
   subscribeNode(id: NodeId, fn: (n: Node) => void): Unsubscribe;
-  subscribeDoc(fn: (d: Doc) => void): Unsubscribe;
+  subscribeChildIds(id: NodeId, fn: (ids: NodeId[]) => void): Unsubscribe;
 }
 ```
 
@@ -85,7 +85,7 @@ Both Zustand and a CRDT can implement this interface. In Phase 1 `origin` is ign
 ### 中文
 
 - **第一阶段（v0.1 – v0.2）：** Zustand + Immer 装 `Doc` 和临时 UI 状态。
-- **对外 API 是 `core.applyOp(op)` + 按需 selector**——**绝不**直接把 Zustand store 暴露给消费者。
+- **对外 API 是 `core.applyDocOp(op)` + 按需 selector**——**绝不**直接把 Zustand store 暴露给消费者。
 - **第二阶段（v0.3）：** Zustand store 内部实现换成 `Y.Doc`（或 Loro——v0.2 期间根据当时的稳定性和工程学终选）。`core` 的 op API 不变。撤销和 awareness API 会**增长**。
 
 同上代码块（接口语言无关）。第一阶段 `origin` 忽略、`scope` 默认 `global`；第二阶段二者都有实际意义。
@@ -105,7 +105,7 @@ Both Zustand and a CRDT can implement this interface. In Phase 1 `origin` is ign
 
 **Cons**
 
-- The `subscribeNode` / `subscribeDoc` API is slightly heavier than just `useStore(selector)` — the indirection is the point.
+- The scoped subscription API is slightly heavier than just `useStore(selector)` — the indirection is the point.
 - We must resist importing the Zustand store from anywhere outside `core/`. ESLint rule enforces.
 - Awareness, presence cursors, and remote-undo conflict resolution are not designed in Phase 1; v0.3 will introduce them. This is *acceptable but not free*.
 - Loro vs Y.js decision is deferred to v0.2. If their semantics diverge meaningfully, the `core.undo` contract may need a minor revision at swap time.
@@ -128,7 +128,7 @@ Both Zustand and a CRDT can implement this interface. In Phase 1 `origin` is ign
 
 **缺点**
 
-- `subscribeNode` / `subscribeDoc` 比 `useStore(selector)` 稍重——这层间接本来就是设计目标。
+- 按需订阅 API 比 `useStore(selector)` 稍重——这层间接本来就是设计目标。
 - 必须忍住在 `src/core/` 之外的地方 import Zustand store 的诱惑。ESLint 规则强制。
 - Awareness、presence 光标、远端撤销冲突解决在第一阶段不设计；v0.3 引入。这**可以接受但不是白送**。
 - Loro vs Y.js 决策推迟到 v0.2。如果二者语义差异显著，换的时候 `core.undo` 合约可能要小修。

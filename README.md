@@ -30,7 +30,7 @@ MindForge is an open-source mind map editor that aims to:
 
 TypeScript · React 19 · Vite · Tiptap (ProseMirror) · Zustand (→ CRDT later) · Tailwind v4 · Tauri 2 (desktop) · single-package Vite app.
 
-See [`docs/DESIGN.md`](./docs/DESIGN.md) for the full architecture, decisions, and roadmap. AI / vibe coding rules live in [`AGENTS.md`](./AGENTS.md) and [`docs/VIBE_CODING_RULES.zh-CN.md`](./docs/VIBE_CODING_RULES.zh-CN.md).
+See [`docs/DESIGN.md`](./docs/DESIGN.md) for the full architecture, decisions, and roadmap. Spike, state model, and core API specs live in [`docs/SPIKE_PLAN.zh-CN.md`](./docs/SPIKE_PLAN.zh-CN.md), [`docs/STATE_MODEL.zh-CN.md`](./docs/STATE_MODEL.zh-CN.md), and [`docs/CORE_API.zh-CN.md`](./docs/CORE_API.zh-CN.md). AI / vibe coding rules live in [`AGENTS.md`](./AGENTS.md) and [`docs/VIBE_CODING_RULES.zh-CN.md`](./docs/VIBE_CODING_RULES.zh-CN.md).
 
 ## Roadmap
 

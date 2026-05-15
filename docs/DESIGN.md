@@ -4,7 +4,7 @@
 >
 > **Status:** Living document. Numbers and decisions before v0.1-release are best-effort and will be revised as the spike validates assumptions.
 
-This document captures the product positioning, open risks, scope, technical decisions, and roadmap for MindForge. Per-decision rationale lives in [`adr/`](../adr). AI / vibe coding execution rules live in [`VIBE_CODING_RULES.zh-CN.md`](./VIBE_CODING_RULES.zh-CN.md), with the minimal agent contract in root [`AGENTS.md`](../AGENTS.md).
+This document captures the product positioning, open risks, scope, technical decisions, and roadmap for MindForge. Per-decision rationale lives in [`adr/`](../adr). Execution specs live in [`SPIKE_PLAN.zh-CN.md`](./SPIKE_PLAN.zh-CN.md), [`STATE_MODEL.zh-CN.md`](./STATE_MODEL.zh-CN.md), and [`CORE_API.zh-CN.md`](./CORE_API.zh-CN.md). AI / vibe coding execution rules live in [`VIBE_CODING_RULES.zh-CN.md`](./VIBE_CODING_RULES.zh-CN.md), with the minimal agent contract in root [`AGENTS.md`](../AGENTS.md).
 
 ## 1. Product positioning
 
@@ -50,6 +50,8 @@ These are unresolved before v0.1-spike. The spike exists to resolve the load-bea
 - Benchmark harness: 100 / 500 / 1000 / 2000 nodes, frame time, typing latency, layout time.
 
 **Out of scope:** themes (beyond one), AI, free arrows, import / export, drag-to-reparent, notes, undo, anything cosmetic.
+
+Detailed execution plan and go / no-go criteria: [`SPIKE_PLAN.zh-CN.md`](./SPIKE_PLAN.zh-CN.md).
 
 **Exit criteria — proceed to v0.1-release if:**
 
@@ -182,24 +184,23 @@ interface FreeEdge {
 User input (canvas or outline)
         │
         ▼
-Operation  (insertNode / moveNode / editContent / setSelection / ...)
+Intent / command
         │
-        ▼
-core.applyOp(doc, op)  ──►  doc'   (immutable, via Immer)
+        ├──► DocOperation (insertNode / moveNode / editContent / ...)
+        │       │
+        │       ▼
+        │   core.applyDocOp(doc, op, context) ──► doc' (immutable, via Immer)
+        │       │
+        │       ├──► content undo stack
+        │       └──► layout / render / outline update through scoped subscriptions
         │
-        ├──► undo stack
-        │
-        ▼
-Zustand store update
-        │
-        ├──► layout/   recomputes positions (memoized by parentId + childIds)
-        │
-        ├──► render/   re-renders affected nodes (React keyed by NodeId)
-        │
-        └──► outline/  syncs Tiptap state from doc' (origin tag prevents loops)
+        └──► ViewOperation (setSelection / setViewport / hover / ...)
+                │
+                ▼
+            ViewState / EditorBridgeState update (not part of content undo)
 ```
 
-Two render targets (canvas + outline) over one source of truth (`doc`); `Operation` is the only mutator. This is the core invariant that lets every feature be added without spaghetti coupling.
+Two render targets (canvas + outline) share one document source of truth (`doc`); `DocOperation` is the only document mutator. Selection / cursor state belongs to `ViewState` and `EditorBridgeState`, not `DocState`. See [`STATE_MODEL.zh-CN.md`](./STATE_MODEL.zh-CN.md) and [`CORE_API.zh-CN.md`](./CORE_API.zh-CN.md).
 
 ## 9. Roadmap
 
@@ -227,3 +228,9 @@ MindForge can be implemented quickly with AI assistance, but agents must not byp
 
 - [`AGENTS.md`](../AGENTS.md): minimal execution contract for coding agents.
 - [`docs/VIBE_CODING_RULES.zh-CN.md`](./VIBE_CODING_RULES.zh-CN.md): full rules covering module boundaries, ops, sync, rendering, AI, tests, and definition of done.
+
+## 12. Execution specs
+
+- [`SPIKE_PLAN.zh-CN.md`](./SPIKE_PLAN.zh-CN.md): v0.1-spike scope, benchmark, selection acceptance, go / no-go.
+- [`STATE_MODEL.zh-CN.md`](./STATE_MODEL.zh-CN.md): boundaries between `DocState`, `ViewState`, `EditorBridgeState`, and `HistoryState`.
+- [`CORE_API.zh-CN.md`](./CORE_API.zh-CN.md): `DocOperation`, validation, selectors, store adapter, and AI candidate patch boundaries.
