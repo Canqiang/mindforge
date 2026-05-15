@@ -22,6 +22,12 @@ interface CoreStoreState {
 
 export interface CoreStore {
   getDoc(): Doc;
+  /**
+   * Subscribe to any doc mutation. The callback receives no arguments; call
+   * `getDoc()` to read the current snapshot. Designed for `useSyncExternalStore`
+   * style consumption — does NOT fire on subscribe.
+   */
+  subscribe(fn: () => void): Unsubscribe;
   applyDocOp(op: DocOperation, origin: OpOrigin): ApplyResult;
   applyDocTransaction(ops: DocOperation[], origin: OpOrigin): ApplyResult;
   undo(scope?: 'local' | 'global'): ApplyResult;
@@ -84,6 +90,13 @@ export function createCoreStore(initialDoc: Doc): CoreStore {
   return {
     getDoc() {
       return store.getState().doc;
+    },
+    subscribe(fn) {
+      return store.subscribe((state, prev) => {
+        if (state.doc !== prev.doc) {
+          fn();
+        }
+      });
     },
     applyDocOp(op, origin) {
       return applyTransaction([op], origin, true);

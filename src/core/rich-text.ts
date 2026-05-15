@@ -16,6 +16,28 @@ export function cloneRichText(content: RichText): RichText {
   return structuredClone(content);
 }
 
+/**
+ * Produce a key-order-stable string signature for a RichText doc. Used by the
+ * editor bridge to decide whether an incoming `content` prop is the echo of
+ * an update the editor just emitted. Comparing JSON.stringify directly is
+ * unsafe because different RichText sources (Tiptap getJSON, fixture JSON,
+ * structuredClone) may serialize keys in different orders.
+ */
+export function richTextSignature(content: RichText): string {
+  return JSON.stringify(content, sortedKeyReplacer);
+}
+
+function sortedKeyReplacer(_key: string, value: unknown): unknown {
+  if (value && typeof value === 'object' && !Array.isArray(value)) {
+    const sorted: Record<string, unknown> = {};
+    for (const key of Object.keys(value as Record<string, unknown>).sort()) {
+      sorted[key] = (value as Record<string, unknown>)[key];
+    }
+    return sorted;
+  }
+  return value;
+}
+
 export function getPlainText(content: RichText): string {
   const parts: string[] = [];
   visitRichText(content, (node) => {

@@ -1,8 +1,8 @@
 import type { JSONContent } from '@tiptap/core';
 import { EditorContent, useEditor } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
-import { useEffect, useMemo, useRef } from 'react';
-import type { NodeId, RichText } from '../core';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { richTextSignature, type NodeId, type RichText } from '../core';
 import { clampSelectionRange, createSelectionMirror, shouldMirrorSelection, type EditorSurface, type TextSelectionMirror } from './selection';
 
 const nodeEditorExtensions = [
@@ -38,11 +38,13 @@ export function NodeEditor({
   onContentChange,
   onSelectionChange
 }: NodeEditorProps) {
+  const [isComposing, setIsComposing] = useState(false);
   const isComposingRef = useRef(false);
+  isComposingRef.current = isComposing;
   const isApplyingMirrorRef = useRef(false);
   const onContentChangeRef = useRef(onContentChange);
   const onSelectionChangeRef = useRef(onSelectionChange);
-  const lastContentJsonRef = useRef(JSON.stringify(content));
+  const lastSignatureRef = useRef(richTextSignature(content));
   const editorClassName = useMemo(() => ['node-editor', `node-editor-${surface}`, className].filter(Boolean).join(' '), [className, surface]);
 
   useEffect(() => {
@@ -62,7 +64,9 @@ export function NodeEditor({
       },
       onUpdate({ editor: activeEditor }) {
         const nextContent = activeEditor.getJSON() as RichText;
-        lastContentJsonRef.current = JSON.stringify(nextContent);
+        // Record our own emit signature so the prop echo doesn't trigger
+        // a setContent round-trip below.
+        lastSignatureRef.current = richTextSignature(nextContent);
         onContentChangeRef.current(nodeId, nextContent, surface);
       },
       onSelectionUpdate({ editor: activeEditor }) {
@@ -84,19 +88,29 @@ export function NodeEditor({
     [editorClassName, nodeId, surface]
   );
 
-  const contentJson = JSON.stringify(content);
+  const contentSignature = useMemo(() => richTextSignature(content), [content]);
 
   useEffect(() => {
-    if (!editor || editor.isDestroyed || contentJson === lastContentJsonRef.current) {
+    if (!editor || editor.isDestroyed) {
+      return;
+    }
+    // Skip echo of our own update — content prop matches the signature we just emitted.
+    if (contentSignature === lastSignatureRef.current) {
+      return;
+    }
+    // IME composition is in progress — replacing the contentEditable DOM here
+    // would cancel the user's composition. Defer until composition ends; the
+    // effect re-runs when `isComposing` flips false because it's in deps.
+    if (isComposing) {
       return;
     }
 
-    lastContentJsonRef.current = contentJson;
+    lastSignatureRef.current = contentSignature;
     editor.commands.setContent(toTiptapContent(content), {
       emitUpdate: false,
       errorOnInvalidContent: true
     });
-  }, [content, contentJson, editor]);
+  }, [content, contentSignature, editor, isComposing]);
 
   useEffect(() => {
     if (!editor || editor.isDestroyed || !shouldMirrorSelection(mirroredSelection, nodeId, surface)) {
@@ -123,10 +137,10 @@ export function NodeEditor({
     <EditorContent
       editor={editor}
       onCompositionStart={() => {
-        isComposingRef.current = true;
+        setIsComposing(true);
       }}
       onCompositionEnd={() => {
-        isComposingRef.current = false;
+        setIsComposing(false);
       }}
     />
   );

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { applyDocOp, applyDocTransaction, createCoreStore, createEmptyDoc, createTextDoc, getPlainText, repairDoc, validateDoc } from './index';
-import type { ApplyContext, Doc, DocOperation } from './types';
+import { applyDocOp, applyDocTransaction, createCoreStore, createEmptyDoc, createTextDoc, getPlainText, repairDoc, richTextSignature, validateDoc } from './index';
+import type { ApplyContext, Doc, DocOperation, RichText } from './types';
 
 const context: ApplyContext = { origin: 'test', timestamp: 100, history: 'record' };
 
@@ -357,6 +357,51 @@ describe('core doc operations', () => {
     expect(validation.ok).toBe(true);
     expect(repaired.nodes.root.childIds).toContain('b');
     expect(log.some((entry) => entry === 'nodes.root.childIds')).toBe(true);
+  });
+
+  it('richTextSignature is stable across key orderings', () => {
+    const a: RichText = {
+      type: 'doc',
+      content: [
+        { type: 'paragraph', content: [{ type: 'text', text: 'hi' }] }
+      ]
+    };
+    // Same semantic doc but constructed with different key insertion order
+    // (mimicking Tiptap getJSON vs. structuredClone vs. fixture JSON).
+    const b: RichText = JSON.parse(
+      JSON.stringify({
+        content: [
+          { content: [{ text: 'hi', type: 'text' }], type: 'paragraph' }
+        ],
+        type: 'doc'
+      })
+    );
+    expect(richTextSignature(a)).toBe(richTextSignature(b));
+  });
+
+  it('store subscribe fires on doc mutation and not on no-op apply', () => {
+    const doc = withNode(createEmptyDoc({ title: 'Root', now: 0 }), 'a', 'A', 'root');
+    const store = createCoreStore(doc);
+    let calls = 0;
+    const unsubscribe = store.subscribe(() => {
+      calls += 1;
+    });
+
+    store.applyDocOp({ id: 'theme-1', type: 'setTheme', theme: 'mono' }, 'test');
+    store.applyDocOp({ id: 'theme-2', type: 'setTheme', theme: 'default' }, 'test');
+    // failing op should not fire the subscriber (doc identity preserved)
+    store.applyDocOp({ id: 'bad', type: 'deleteSubtree', nodeId: 'missing' }, 'test');
+    unsubscribe();
+    store.applyDocOp({ id: 'theme-3', type: 'setTheme', theme: 'mono' }, 'test');
+
+    expect(calls).toBe(2);
+  });
+
+  it('createCoreStore rejects an invalid initial doc', () => {
+    const doc = createEmptyDoc({ title: 'Root', now: 0 });
+    const broken = structuredClone(doc);
+    broken.rootId = 'does-not-exist';
+    expect(() => createCoreStore(broken)).toThrow(/initial doc is invalid/i);
   });
 });
 
