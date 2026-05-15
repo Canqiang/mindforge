@@ -6,6 +6,7 @@ import { computeSimpleMindMapLayout } from './layout';
 import { OutlinePane } from './outline/OutlinePane';
 import { SpikeCanvas } from './render/SpikeCanvas';
 import { createSpikeDoc } from './spike-seed';
+import { resolveTheme } from './theme/themes';
 
 const APP_BOOT_STARTED_AT = performance.now();
 
@@ -78,6 +79,22 @@ export function App() {
     // close / route change doesn't lose the last keystroke.
     return subscribeStorePersistence(runtime.store);
   }, [runtime]);
+
+  const theme = resolveTheme(doc.theme);
+  useEffect(() => {
+    if (typeof document === 'undefined') return;
+    const previous = document.documentElement.dataset.theme;
+    document.documentElement.dataset.theme = theme;
+    return () => {
+      // Restore the previous theme attribute on unmount so dev hot-reloads
+      // don't leave a stale value on document.documentElement.
+      if (previous === undefined) {
+        delete document.documentElement.dataset.theme;
+      } else {
+        document.documentElement.dataset.theme = previous;
+      }
+    };
+  }, [theme]);
 
   const measuredNodes = useMemo(
     () => Object.fromEntries(Object.keys(doc.nodes).map((id) => [id, { width: id === doc.rootId ? 240 : 200, height: 64 }])),
@@ -179,6 +196,17 @@ export function App() {
     [applyOperation]
   );
 
+  const handleSelectTheme = useCallback(
+    (themeId: string) => {
+      opSeqRef.current += 1;
+      applyOperation(
+        { id: `theme:${themeId}:${opSeqRef.current}`, type: 'setTheme', theme: themeId },
+        'canvas'
+      );
+    },
+    [applyOperation]
+  );
+
   return (
     <main
       className="app-shell"
@@ -203,10 +231,12 @@ export function App() {
           layout={layout}
           activeNodeId={activeEditors.canvas}
           mirroredSelection={selectionMirror}
+          theme={theme}
           onActivateEditor={handleActivateEditor}
           onContentChange={handleContentChange}
           onSelectionChange={handleSelectionChange}
           onToggleCollapsed={handleToggleCollapsed}
+          onSelectTheme={handleSelectTheme}
           onViewportMeasured={handleCanvasViewportMeasured}
         />
       </section>

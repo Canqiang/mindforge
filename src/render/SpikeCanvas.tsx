@@ -3,16 +3,19 @@ import { getPlainText, type Doc, type NodeId, type RichText } from '../core';
 import { NodeEditorSlot } from '../editor/NodeEditorSlot';
 import type { EditorSurface, TextSelectionMirror } from '../editor/selection';
 import type { LayoutNode, LayoutResult } from '../layout';
+import { THEMES } from '../theme/themes';
 
 interface SpikeCanvasProps {
   doc: Doc;
   layout: LayoutResult;
   activeNodeId: NodeId | null;
   mirroredSelection: TextSelectionMirror | null;
+  theme: string;
   onActivateEditor: (surface: EditorSurface, nodeId: NodeId) => void;
   onContentChange: (nodeId: NodeId, content: RichText, surface: EditorSurface) => void;
   onSelectionChange: (selection: TextSelectionMirror) => void;
   onToggleCollapsed: (nodeId: NodeId, next: boolean) => void;
+  onSelectTheme: (themeId: string) => void;
   onViewportMeasured: () => void;
 }
 
@@ -42,10 +45,12 @@ export function SpikeCanvas({
   layout,
   activeNodeId,
   mirroredSelection,
+  theme,
   onActivateEditor,
   onContentChange,
   onSelectionChange,
   onToggleCollapsed,
+  onSelectTheme,
   onViewportMeasured
 }: SpikeCanvasProps) {
   const [viewport, setViewport] = useState<Viewport>({ x: 0, y: 0, scale: 1 });
@@ -216,7 +221,7 @@ export function SpikeCanvas({
         }
       }}
     >
-      <div className="canvas-toolbar" aria-label="Canvas viewport controls">
+      <div className="canvas-toolbar" aria-label="Canvas controls">
         <button type="button" onClick={() => setViewport((current) => ({ ...current, scale: Math.max(0.45, current.scale - 0.1) }))}>
           -
         </button>
@@ -227,6 +232,21 @@ export function SpikeCanvas({
         <button type="button" onClick={() => setViewport({ x: 0, y: 0, scale: 1 })}>
           Reset
         </button>
+        <span className="canvas-toolbar-divider" aria-hidden="true" />
+        <label className="canvas-toolbar-theme">
+          <span className="canvas-toolbar-theme-label">Theme</span>
+          <select
+            aria-label="Theme"
+            value={theme}
+            onChange={(event) => onSelectTheme(event.target.value)}
+          >
+            {THEMES.map((option) => (
+              <option key={option.id} value={option.id}>
+                {option.label}
+              </option>
+            ))}
+          </select>
+        </label>
       </div>
       <div
         className="spike-canvas-world"

@@ -44,6 +44,20 @@ test('benchmark canvas culls offscreen nodes without breaking edit mirror', asyn
   await expect(slot(page, 'canvas', 'node-1')).toContainText('Culling keeps mirror editable');
 });
 
+test('theme selector switches CSS variables across the document', async ({ page }) => {
+  const html = page.locator('html');
+  await expect(html).toHaveAttribute('data-theme', 'default');
+
+  await page.getByLabel('Theme').selectOption('mono');
+  await expect(html).toHaveAttribute('data-theme', 'mono');
+
+  await page.getByLabel('Theme').selectOption('minimal');
+  await expect(html).toHaveAttribute('data-theme', 'minimal');
+
+  await page.getByLabel('Theme').selectOption('default');
+  await expect(html).toHaveAttribute('data-theme', 'default');
+});
+
 test('outline chevron collapses a subtree on both panes', async ({ page }) => {
   // node-1 has children (outline-content, outline-selection in the spike seed).
   const outlineChevron = slot(page, 'outline', 'node-1').locator('xpath=preceding-sibling::button[@class="outline-chevron"]');
