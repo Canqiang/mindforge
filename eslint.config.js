@@ -50,14 +50,20 @@ export default tseslint.config(
           {
             target: './src/render',
             from: './src',
-            except: ['./core', './layout', './render'],
-            message: 'src/render/ may only import from src/core/ and src/layout/'
+            except: ['./core', './editor', './layout', './render'],
+            message: 'src/render/ may only import from src/core/, src/editor/, and src/layout/'
           },
           {
             target: './src/outline',
             from: './src',
-            except: ['./core', './outline'],
-            message: 'src/outline/ may only import from src/core/'
+            except: ['./core', './editor', './outline'],
+            message: 'src/outline/ may only import from src/core/ and src/editor/'
+          },
+          {
+            target: './src/editor',
+            from: './src',
+            except: ['./core', './editor'],
+            message: 'src/editor/ may only import from src/core/'
           },
           {
             target: './src/theme',

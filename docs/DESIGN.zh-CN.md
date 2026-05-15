@@ -124,6 +124,7 @@ mindforge/
 ├── src/
 │   ├── core/      # 文档模型、操作（CRUD / 移动 / 折叠）、撤销栈、store
 │   ├── layout/    # 布局算法（脑图；后续：组织图 / 逻辑图）
+│   ├── editor/    # 共享 Tiptap 节点编辑器 + selection bridge 原语
 │   ├── render/    # React 渲染组件（节点、连线、画布、minimap）
 │   ├── outline/   # Tiptap 大纲编辑器 + 与 core 的双向绑定
 │   ├── theme/     # CSS 变量 + 预设主题

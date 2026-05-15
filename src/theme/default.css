@@ -8,9 +8,11 @@
   --mf-muted: #68707c;
   --mf-border: #d9dee7;
   --mf-accent: #2f6fed;
+  --mf-accent-soft: #e7efff;
   --mf-node: #ffffff;
   --mf-node-border: #b9c7dc;
   --mf-edge: #8d9bb0;
+  --mf-danger: #b42318;
 }
 
 * {
@@ -40,19 +42,44 @@ textarea {
 .outline-pane {
   border-right: 1px solid var(--mf-border);
   background: var(--mf-panel);
-  padding: 24px;
+  padding: 20px 18px;
+  overflow: auto;
 }
 
-.outline-pane h1 {
-  margin: 12px 0 20px;
-  font-size: 22px;
+.outline-node {
+  --outline-depth: 0;
+  margin-top: 8px;
 }
 
-.outline-pane ol {
-  margin: 0;
-  padding-left: 20px;
+.outline-node-row {
+  display: grid;
+  grid-template-columns: 14px minmax(0, 1fr);
+  align-items: start;
+  gap: 8px;
+  padding-left: calc(var(--outline-depth) * 18px);
+}
+
+.outline-bullet {
+  width: 6px;
+  height: 6px;
+  margin-top: 15px;
+  border-radius: 999px;
+  background: var(--mf-edge);
+}
+
+.outline-children {
+  margin-top: 2px;
+}
+
+.bridge-status {
+  position: sticky;
+  bottom: 0;
+  margin-top: 24px;
+  padding: 10px 0 0;
+  border-top: 1px solid var(--mf-border);
   color: var(--mf-muted);
-  line-height: 1.8;
+  background: var(--mf-panel);
+  font-size: 12px;
 }
 
 .pane-label {
@@ -73,15 +100,23 @@ textarea {
   width: 100%;
   height: 100vh;
   overflow: hidden;
+  touch-action: none;
   background-image:
     linear-gradient(rgba(141, 155, 176, 0.16) 1px, transparent 1px),
     linear-gradient(90deg, rgba(141, 155, 176, 0.16) 1px, transparent 1px);
   background-size: 32px 32px;
 }
 
+.spike-canvas-world {
+  position: absolute;
+  inset: 0 auto auto 0;
+  transform-origin: 0 0;
+}
+
 .spike-edges {
   position: absolute;
-  inset: 0;
+  left: 0;
+  top: 0;
   overflow: visible;
   pointer-events: none;
 }
@@ -104,4 +139,92 @@ textarea {
   border-color: color-mix(in srgb, var(--mf-accent), white 35%);
   color: var(--mf-accent);
   font-weight: 700;
+}
+
+.node-editor {
+  width: 100%;
+  min-width: 0;
+  border-radius: 6px;
+  outline: none;
+}
+
+.node-editor p {
+  margin: 0;
+}
+
+.node-editor .ProseMirror {
+  outline: none;
+  word-break: break-word;
+}
+
+.node-editor-outline {
+  padding: 6px 8px;
+  color: var(--mf-ink);
+  font-size: 14px;
+  line-height: 1.45;
+}
+
+.node-editor-canvas {
+  color: inherit;
+  font-size: 14px;
+  line-height: 1.35;
+}
+
+.node-editor .ProseMirror-focused {
+  background: var(--mf-accent-soft);
+  box-shadow: 0 0 0 3px var(--mf-accent-soft);
+}
+
+[data-mirrored='true'] .ProseMirror {
+  background: color-mix(in srgb, var(--mf-accent-soft), white 45%);
+}
+
+.canvas-toolbar {
+  position: absolute;
+  z-index: 5;
+  right: 18px;
+  top: 18px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px;
+  border: 1px solid var(--mf-border);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.92);
+  box-shadow: 0 10px 24px rgba(31, 41, 55, 0.08);
+}
+
+.canvas-toolbar button {
+  height: 28px;
+  min-width: 28px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--mf-ink);
+  cursor: pointer;
+}
+
+.canvas-toolbar button:hover {
+  border-color: var(--mf-border);
+  background: var(--mf-accent-soft);
+}
+
+.canvas-toolbar span {
+  min-width: 44px;
+  color: var(--mf-muted);
+  font-size: 12px;
+  text-align: center;
+}
+
+.operation-error {
+  position: fixed;
+  right: 18px;
+  bottom: 18px;
+  max-width: 420px;
+  padding: 12px 14px;
+  border: 1px solid color-mix(in srgb, var(--mf-danger), white 45%);
+  border-radius: 8px;
+  background: #fff8f7;
+  color: var(--mf-danger);
+  font-size: 13px;
 }

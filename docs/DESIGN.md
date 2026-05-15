@@ -124,6 +124,7 @@ mindforge/
 ├── src/
 │   ├── core/      # document model, ops (CRUD / move / collapse), undo stack, store
 │   ├── layout/    # layout algorithms (mind map; later: org / logic)
+│   ├── editor/    # shared Tiptap node editor + selection bridge primitives
 │   ├── render/    # React render components (nodes, edges, canvas, minimap)
 │   ├── outline/   # Tiptap outline editor + two-way binding to core
 │   ├── theme/     # CSS variables + preset themes

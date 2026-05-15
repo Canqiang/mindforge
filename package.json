@@ -15,6 +15,9 @@
     "bench:fixtures": "node scripts/generate-benchmark-fixtures.mjs"
   },
   "dependencies": {
+    "@tiptap/core": "^3.23.4",
+    "@tiptap/react": "^3.23.4",
+    "@tiptap/starter-kit": "^3.23.4",
     "immer": "^11.0.1",
     "react": "^19.2.1",
     "react-dom": "^19.2.1",
