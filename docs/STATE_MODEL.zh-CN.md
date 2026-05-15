@@ -224,3 +224,14 @@ ESLint 阻断 `src/core/` 外引入 zustand 的规则仍然有效；`useSyncExte
 - undo stack（v0.1 默认不保存）
 
 LocalStorage 自动备份只备份 `Doc`。如果要恢复 UI 状态，必须作为单独 feature 设计。
+
+### v0.1 实现：LocalStorage backup
+
+模块：`src/io/local-storage-persistence.ts`。
+
+- **Key**：`mindforge:doc:v1`。schema 升级时写新 key（`v2`），保留 `v1` 一个 release 周期作为回退安全网。
+- **写**：`subscribeStorePersistence(store, { debounceMs: 500 })`，对 `CoreStore.subscribe` 做 debounce；`unsubscribe()` 同步 flush 一次，避免 tab close / route change 丢失最后一次按键。
+- **读**：`loadStoredDoc()`，先 `repairDoc` 兜底 drift，再 `validateDoc` 校验；失败一律返回 `null` 退到 spike seed。
+- **不持久化的场景**：URL 带 `?fixture=...` 时（benchmark 模式），既不读 stored，也不订阅 persist，避免 benchmark 污染用户文档。
+- **错误吞下**：QuotaExceeded / 私有模式 storage 不可用 / JSON 解析失败——全部走 `PersistenceLogger.warn`，不抛错、不中断编辑。
+- **不持久化的字段**：undo stack（v0.1 默认）、ViewState、EditorBridgeState、SelectionState——重启后回到默认。
