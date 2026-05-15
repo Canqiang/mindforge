@@ -56,10 +56,10 @@ async function runFixture(page, fixture) {
     mountMs: Number(element.getAttribute('data-mount-ms'))
   }));
 
-  const editorCount = await page.locator('[data-node-id][data-editor-surface]').count();
   const canvasNodeCount = await page.locator('.spike-node').count();
   const scriptedPanFrames = await measureScriptedPan(page);
   const editLatencyMs = await measureEditLatency(page);
+  const editorCount = await page.locator('.ProseMirror').count();
 
   return {
     fixture,
@@ -104,14 +104,25 @@ async function measureScriptedPan(page) {
 }
 
 async function measureEditLatency(page) {
-  const target = page.locator('[data-node-id="node-1"][data-editor-surface="outline"] .ProseMirror').first();
-  const mirror = page.locator('[data-node-id="node-1"][data-editor-surface="canvas"] .ProseMirror').first();
+  const target = await activateEditor(page, 'outline', 'node-1');
+  const mirror = editorSlot(page, 'canvas', 'node-1');
   const text = `Benchmark edit ${Date.now()}`;
   const startedAt = performance.now();
   await target.fill(text);
-  await mirror.waitFor({ state: 'attached', timeout: args.timeoutMs });
   await mirror.filter({ hasText: text }).waitFor({ timeout: args.timeoutMs });
   return performance.now() - startedAt;
+}
+
+async function activateEditor(page, surface, nodeId) {
+  const slot = editorSlot(page, surface, nodeId);
+  await slot.click();
+  const editor = slot.locator('.ProseMirror');
+  await editor.waitFor({ state: 'visible', timeout: args.timeoutMs });
+  return editor;
+}
+
+function editorSlot(page, surface, nodeId) {
+  return page.locator(`[data-node-id="${nodeId}"][data-editor-surface="${surface}"]`).first();
 }
 
 async function ensureServer() {
@@ -201,8 +212,8 @@ function formatMarkdown(rows) {
     'Notes:',
     '',
     '- `edit sync ms` measures outline edit -> matching canvas text visible.',
-    '- `pan * ms` is scripted wheel-pan frame interval sampling inside the browser.',
-    '- This benchmark intentionally mounts outline and canvas editors together to stress the current spike architecture.'
+    '- `editors` counts mounted ProseMirror editors after the edit-sync measurement.',
+    '- `pan * ms` is scripted wheel-pan frame interval sampling inside the browser.'
   );
 
   return lines.join('\n');
@@ -214,7 +225,7 @@ function classifyRows(rows) {
     (row) => row.mountMs > 2000 || row.panFrameP95Ms > 25 || row.editLatencyMs > 100
   );
   if (noGoRows.length > 0) {
-    return 'No-go for the current full-mount, two-editor-per-node spike path. The next spike step should test viewport culling or a single active editor before release work.';
+    return 'No-go for the currently measured render path. The next spike step should reduce visible DOM work with viewport culling and then rerun the same benchmark.';
   }
 
   const conditionalRows = rows.filter(

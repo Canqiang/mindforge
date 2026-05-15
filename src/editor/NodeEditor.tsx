@@ -122,9 +122,6 @@ export function NodeEditor({
   return (
     <EditorContent
       editor={editor}
-      data-node-id={nodeId}
-      data-editor-surface={surface}
-      data-mirrored={shouldMirrorSelection(mirroredSelection, nodeId, surface)}
       onCompositionStart={() => {
         isComposingRef.current = true;
       }}

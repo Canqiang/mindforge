@@ -141,9 +141,13 @@ textarea {
   font-weight: 700;
 }
 
+.node-editor-slot,
 .node-editor {
   width: 100%;
   min-width: 0;
+}
+
+.node-editor {
   border-radius: 6px;
   outline: none;
 }
@@ -168,6 +172,34 @@ textarea {
   color: inherit;
   font-size: 14px;
   line-height: 1.35;
+}
+
+.node-editor-placeholder {
+  display: block;
+  width: 100%;
+  min-height: 24px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  line-height: inherit;
+  text-align: left;
+  word-break: break-word;
+  cursor: text;
+}
+
+.node-editor-slot[data-editor-surface='outline'] .node-editor-placeholder {
+  padding: 6px 8px;
+  color: var(--mf-ink);
+  font-size: 14px;
+  line-height: 1.45;
+}
+
+.node-editor-slot[data-active='true'] .node-editor-placeholder,
+.node-editor-slot[data-mirrored='true'] .node-editor-placeholder {
+  background: var(--mf-accent-soft);
+  box-shadow: 0 0 0 3px var(--mf-accent-soft);
 }
 
 .node-editor .ProseMirror-focused {

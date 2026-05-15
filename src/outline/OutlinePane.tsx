@@ -1,24 +1,28 @@
 import { getPlainText, type Doc, type NodeId, type RichText } from '../core';
-import { NodeEditor } from '../editor/NodeEditor';
+import { NodeEditorSlot } from '../editor/NodeEditorSlot';
 import { formatSelectionMirror, type EditorSurface, type TextSelectionMirror } from '../editor/selection';
 import type { CSSProperties } from 'react';
 
 interface OutlinePaneProps {
   doc: Doc;
+  activeNodeId: NodeId | null;
   mirroredSelection: TextSelectionMirror | null;
+  onActivateEditor: (surface: EditorSurface, nodeId: NodeId) => void;
   onContentChange: (nodeId: NodeId, content: RichText, surface: EditorSurface) => void;
   onSelectionChange: (selection: TextSelectionMirror) => void;
 }
 
-export function OutlinePane({ doc, mirroredSelection, onContentChange, onSelectionChange }: OutlinePaneProps) {
+export function OutlinePane({ doc, activeNodeId, mirroredSelection, onActivateEditor, onContentChange, onSelectionChange }: OutlinePaneProps) {
   return (
     <aside className="outline-pane">
       <div className="pane-label">Spike outline bridge</div>
       <OutlineNode
         doc={doc}
+        activeNodeId={activeNodeId}
         nodeId={doc.rootId}
         depth={0}
         mirroredSelection={mirroredSelection}
+        onActivateEditor={onActivateEditor}
         onContentChange={onContentChange}
         onSelectionChange={onSelectionChange}
       />
@@ -34,7 +38,7 @@ interface OutlineNodeProps extends OutlinePaneProps {
   depth: number;
 }
 
-function OutlineNode({ doc, nodeId, depth, mirroredSelection, onContentChange, onSelectionChange }: OutlineNodeProps) {
+function OutlineNode({ doc, activeNodeId, nodeId, depth, mirroredSelection, onActivateEditor, onContentChange, onSelectionChange }: OutlineNodeProps) {
   const node = doc.nodes[nodeId];
   if (!node) {
     return null;
@@ -46,12 +50,14 @@ function OutlineNode({ doc, nodeId, depth, mirroredSelection, onContentChange, o
     <div className="outline-node" style={{ '--outline-depth': depth } as CSSProperties}>
       <div className="outline-node-row">
         <span className="outline-bullet" aria-hidden="true" />
-        <NodeEditor
+        <NodeEditorSlot
           nodeId={nodeId}
           content={node.content}
           surface="outline"
+          active={activeNodeId === nodeId}
           mirroredSelection={mirroredSelection}
           ariaLabel={`Outline editor for ${title}`}
+          onActivate={onActivateEditor}
           onContentChange={onContentChange}
           onSelectionChange={onSelectionChange}
         />
@@ -62,9 +68,11 @@ function OutlineNode({ doc, nodeId, depth, mirroredSelection, onContentChange, o
             <OutlineNode
               key={childId}
               doc={doc}
+              activeNodeId={activeNodeId}
               nodeId={childId}
               depth={depth + 1}
               mirroredSelection={mirroredSelection}
+              onActivateEditor={onActivateEditor}
               onContentChange={onContentChange}
               onSelectionChange={onSelectionChange}
             />

@@ -1,13 +1,15 @@
 import { useMemo, useRef, useState } from 'react';
 import { getPlainText, type Doc, type NodeId, type RichText } from '../core';
-import { NodeEditor } from '../editor/NodeEditor';
+import { NodeEditorSlot } from '../editor/NodeEditorSlot';
 import type { EditorSurface, TextSelectionMirror } from '../editor/selection';
 import type { LayoutResult } from '../layout';
 
 interface SpikeCanvasProps {
   doc: Doc;
   layout: LayoutResult;
+  activeNodeId: NodeId | null;
   mirroredSelection: TextSelectionMirror | null;
+  onActivateEditor: (surface: EditorSurface, nodeId: NodeId) => void;
   onContentChange: (nodeId: NodeId, content: RichText, surface: EditorSurface) => void;
   onSelectionChange: (selection: TextSelectionMirror) => void;
 }
@@ -18,7 +20,7 @@ interface Viewport {
   scale: number;
 }
 
-export function SpikeCanvas({ doc, layout, mirroredSelection, onContentChange, onSelectionChange }: SpikeCanvasProps) {
+export function SpikeCanvas({ doc, layout, activeNodeId, mirroredSelection, onActivateEditor, onContentChange, onSelectionChange }: SpikeCanvasProps) {
   const [viewport, setViewport] = useState<Viewport>({ x: 0, y: 0, scale: 1 });
   const panRef = useRef<{ pointerId: number; x: number; y: number; viewport: Viewport } | null>(null);
   const world = useMemo(
@@ -124,12 +126,14 @@ export function SpikeCanvas({ doc, layout, mirroredSelection, onContentChange, o
               }}
             >
               {node ? (
-                <NodeEditor
+                <NodeEditorSlot
                   nodeId={layoutNode.id}
                   content={node.content}
                   surface="canvas"
+                  active={activeNodeId === layoutNode.id}
                   mirroredSelection={mirroredSelection}
                   ariaLabel={`Canvas editor for ${title}`}
+                  onActivate={onActivateEditor}
                   onContentChange={onContentChange}
                   onSelectionChange={onSelectionChange}
                 />

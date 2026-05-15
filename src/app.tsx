@@ -12,12 +12,15 @@ interface AppRuntime {
   fixtureName: string;
 }
 
+type ActiveEditors = Record<EditorSurface, NodeId | null>;
+
 export function App() {
   const [runtime, setRuntime] = useState<AppRuntime>(() => createRuntime(createSpikeDoc(), 'seed'));
   const opSeqRef = useRef(0);
   const mountStartRef = useRef(APP_BOOT_STARTED_AT);
   const [doc, setDoc] = useState(() => runtime.store.getDoc());
   const [selectionMirror, setSelectionMirror] = useState<TextSelectionMirror | null>(null);
+  const [activeEditors, setActiveEditors] = useState<ActiveEditors>({ outline: null, canvas: null });
   const [lastError, setLastError] = useState<string | null>(null);
   const [benchmarkReady, setBenchmarkReady] = useState(false);
   const [mountMs, setMountMs] = useState(0);
@@ -40,6 +43,7 @@ export function App() {
         setRuntime(createRuntime(fixtureDoc, fixtureName));
         setDoc(fixtureDoc);
         setSelectionMirror(null);
+        setActiveEditors({ outline: null, canvas: null });
         setLastError(null);
       })
       .catch((error: unknown) => {
@@ -122,6 +126,18 @@ export function App() {
     [applyOperation]
   );
 
+  const handleActivateEditor = useCallback((surface: EditorSurface, nodeId: NodeId) => {
+    setActiveEditors((current) => (current[surface] === nodeId ? current : { ...current, [surface]: nodeId }));
+  }, []);
+
+  const handleSelectionChange = useCallback((selection: TextSelectionMirror) => {
+    setSelectionMirror(selection);
+    const mirrorSurface: EditorSurface = selection.origin === 'canvas' ? 'outline' : 'canvas';
+    setActiveEditors((current) =>
+      current[mirrorSurface] === selection.nodeId ? current : { ...current, [mirrorSurface]: selection.nodeId }
+    );
+  }, []);
+
   return (
     <main
       className="app-shell"
@@ -133,17 +149,21 @@ export function App() {
     >
       <OutlinePane
         doc={doc}
+        activeNodeId={activeEditors.outline}
         mirroredSelection={selectionMirror}
+        onActivateEditor={handleActivateEditor}
         onContentChange={handleContentChange}
-        onSelectionChange={setSelectionMirror}
+        onSelectionChange={handleSelectionChange}
       />
       <section className="canvas-pane">
         <SpikeCanvas
           doc={doc}
           layout={layout}
+          activeNodeId={activeEditors.canvas}
           mirroredSelection={selectionMirror}
+          onActivateEditor={handleActivateEditor}
           onContentChange={handleContentChange}
-          onSelectionChange={setSelectionMirror}
+          onSelectionChange={handleSelectionChange}
         />
       </section>
       {lastError ? (

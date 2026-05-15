@@ -6,25 +6,37 @@ test.beforeEach(async ({ page }) => {
 });
 
 test('outline edits sync to the matching canvas node', async ({ page }) => {
-  await editor(page, 'outline', 'node-1').fill('Outline edited from E2E');
+  await (await activateEditor(page, 'outline', 'node-1')).fill('Outline edited from E2E');
 
-  await expect(editor(page, 'canvas', 'node-1')).toContainText('Outline edited from E2E');
+  await expect(slot(page, 'canvas', 'node-1')).toContainText('Outline edited from E2E');
 });
 
 test('canvas edits sync to the matching outline node', async ({ page }) => {
-  await editor(page, 'canvas', 'node-2').fill('Canvas edited from E2E');
+  await (await activateEditor(page, 'canvas', 'node-2')).fill('Canvas edited from E2E');
 
-  await expect(editor(page, 'outline', 'node-2')).toContainText('Canvas edited from E2E');
+  await expect(slot(page, 'outline', 'node-2')).toContainText('Canvas edited from E2E');
 });
 
 test('canvas selection mirrors to the outline editor for the same node', async ({ page }) => {
-  await editor(page, 'canvas', 'node-3').click();
+  await (await activateEditor(page, 'canvas', 'node-3')).click();
   await page.keyboard.press('ArrowRight');
 
   await expect(page.locator('.bridge-status')).toContainText('canvas -> node-3');
-  await expect(page.locator('[data-node-id="node-3"][data-editor-surface="outline"]')).toHaveAttribute('data-mirrored', 'true');
+  await expect(slot(page, 'outline', 'node-3')).toHaveAttribute('data-mirrored', 'true');
+  await expect(editor(page, 'outline', 'node-3')).toBeVisible();
 });
 
+async function activateEditor(page: Page, surface: 'outline' | 'canvas', nodeId: string) {
+  await slot(page, surface, nodeId).click();
+  const activeEditor = editor(page, surface, nodeId);
+  await expect(activeEditor).toBeVisible();
+  return activeEditor;
+}
+
+function slot(page: Page, surface: 'outline' | 'canvas', nodeId: string) {
+  return page.locator(`[data-node-id="${nodeId}"][data-editor-surface="${surface}"]`);
+}
+
 function editor(page: Page, surface: 'outline' | 'canvas', nodeId: string) {
-  return page.locator(`[data-node-id="${nodeId}"][data-editor-surface="${surface}"] .ProseMirror`);
+  return slot(page, surface, nodeId).locator('.ProseMirror');
 }
