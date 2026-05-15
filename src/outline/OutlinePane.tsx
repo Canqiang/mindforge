@@ -1,5 +1,6 @@
 import { memo, useMemo, type CSSProperties } from 'react';
 import { getPlainText, type Doc, type MindNode, type NodeId, type RichText } from '../core';
+import type { StructuralKeyEvent } from '../editor/NodeEditor';
 import { NodeEditorSlot } from '../editor/NodeEditorSlot';
 import { formatSelectionMirror, type EditorSurface, type TextSelectionMirror } from '../editor/selection';
 
@@ -11,6 +12,7 @@ interface OutlinePaneProps {
   onContentChange: (nodeId: NodeId, content: RichText, surface: EditorSurface) => void;
   onSelectionChange: (selection: TextSelectionMirror) => void;
   onToggleCollapsed: (nodeId: NodeId, next: boolean) => void;
+  onStructuralKey: (event: StructuralKeyEvent) => void;
 }
 
 interface OutlineRow {
@@ -18,7 +20,7 @@ interface OutlineRow {
   depth: number;
 }
 
-export function OutlinePane({ doc, activeNodeId, mirroredSelection, onActivateEditor, onContentChange, onSelectionChange, onToggleCollapsed }: OutlinePaneProps) {
+export function OutlinePane({ doc, activeNodeId, mirroredSelection, onActivateEditor, onContentChange, onSelectionChange, onToggleCollapsed, onStructuralKey }: OutlinePaneProps) {
   const rows = useMemo(() => flattenOutlineRows(doc), [doc]);
 
   return (
@@ -40,6 +42,7 @@ export function OutlinePane({ doc, activeNodeId, mirroredSelection, onActivateEd
             onContentChange={onContentChange}
             onSelectionChange={onSelectionChange}
             onToggleCollapsed={onToggleCollapsed}
+            onStructuralKey={onStructuralKey}
           />
         );
       })}
@@ -59,6 +62,7 @@ interface OutlineNodeRowProps {
   onContentChange: (nodeId: NodeId, content: RichText, surface: EditorSurface) => void;
   onSelectionChange: (selection: TextSelectionMirror) => void;
   onToggleCollapsed: (nodeId: NodeId, next: boolean) => void;
+  onStructuralKey: (event: StructuralKeyEvent) => void;
 }
 
 const OutlineNodeRow = memo(function OutlineNodeRow({
@@ -69,7 +73,8 @@ const OutlineNodeRow = memo(function OutlineNodeRow({
   onActivateEditor,
   onContentChange,
   onSelectionChange,
-  onToggleCollapsed
+  onToggleCollapsed,
+  onStructuralKey
 }: OutlineNodeRowProps) {
   const title = getPlainText(node.content) || 'Untitled';
   const hasChildren = node.childIds.length > 0;
@@ -102,6 +107,7 @@ const OutlineNodeRow = memo(function OutlineNodeRow({
           onActivate={onActivateEditor}
           onContentChange={onContentChange}
           onSelectionChange={onSelectionChange}
+          onStructuralKey={onStructuralKey}
         />
       </div>
     </div>

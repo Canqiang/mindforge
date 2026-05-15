@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
-import { createCoreStore, validateDoc, type CoreStore, type Doc, type DocOperation, type NodeId, type RichText } from './core';
+import { createCoreStore, createTextDoc, validateDoc, type CoreStore, type Doc, type DocOperation, type NodeId, type RichText } from './core';
+import type { StructuralKeyEvent } from './editor/NodeEditor';
 import type { EditorSurface, TextSelectionMirror } from './editor/selection';
 import { loadStoredDoc, subscribeStorePersistence } from './io';
 import { computeSimpleMindMapLayout } from './layout';
@@ -209,6 +210,110 @@ export function App() {
     [applyOperation]
   );
 
+  const handleStructuralKey = useCallback(
+    (event: StructuralKeyEvent) => {
+      const { nodeId, surface, kind } = event;
+      const currentDoc = runtime.store.getDoc();
+      const node = currentDoc.nodes[nodeId];
+      if (!node) return;
+
+      if (kind === 'enter') {
+        const newId = generateNodeId();
+        let parentId: NodeId;
+        let insertIndex: number;
+        if (nodeId === currentDoc.rootId) {
+          parentId = nodeId;
+          insertIndex = node.childIds.length;
+        } else {
+          parentId = node.parentId as NodeId;
+          const parent = currentDoc.nodes[parentId];
+          insertIndex = parent.childIds.indexOf(nodeId) + 1;
+        }
+
+        opSeqRef.current += 1;
+        applyOperation(
+          {
+            id: `enter:${newId}:${opSeqRef.current}`,
+            type: 'insertNode',
+            parentId,
+            index: insertIndex,
+            node: {
+              id: newId,
+              content: createTextDoc(''),
+              side: parentId === currentDoc.rootId ? (insertIndex % 2 === 0 ? 'right' : 'left') : undefined
+            }
+          },
+          surface
+        );
+        setActiveEditors((current) => ({ ...current, [surface]: newId }));
+        return;
+      }
+
+      if (kind === 'tab') {
+        if (nodeId === currentDoc.rootId || !node.parentId) return;
+        const parent = currentDoc.nodes[node.parentId];
+        const index = parent.childIds.indexOf(nodeId);
+        if (index <= 0) return;
+        const prevSiblingId = parent.childIds[index - 1];
+        const prevSibling = currentDoc.nodes[prevSiblingId];
+        opSeqRef.current += 1;
+        applyOperation(
+          {
+            id: `tab:${nodeId}:${opSeqRef.current}`,
+            type: 'moveNode',
+            nodeId,
+            newParentId: prevSiblingId,
+            index: prevSibling.childIds.length
+          },
+          surface
+        );
+        return;
+      }
+
+      if (kind === 'shift-tab') {
+        if (nodeId === currentDoc.rootId || !node.parentId) return;
+        const parentId = node.parentId;
+        const parent = currentDoc.nodes[parentId];
+        if (parent.parentId === null) return;
+        const grandparentId = parent.parentId;
+        const grandparent = currentDoc.nodes[grandparentId];
+        const parentIndex = grandparent.childIds.indexOf(parentId);
+        opSeqRef.current += 1;
+        applyOperation(
+          {
+            id: `shift-tab:${nodeId}:${opSeqRef.current}`,
+            type: 'moveNode',
+            nodeId,
+            newParentId: grandparentId,
+            index: parentIndex + 1
+          },
+          surface
+        );
+        return;
+      }
+
+      if (kind === 'backspace-empty') {
+        if (nodeId === currentDoc.rootId) return;
+        if (node.childIds.length > 0) return;
+        if (!node.parentId) return;
+        const parent = currentDoc.nodes[node.parentId];
+        const index = parent.childIds.indexOf(nodeId);
+        const focusTarget = index > 0 ? parent.childIds[index - 1] : parent.id;
+        opSeqRef.current += 1;
+        applyOperation(
+          {
+            id: `backspace:${nodeId}:${opSeqRef.current}`,
+            type: 'deleteSubtree',
+            nodeId
+          },
+          surface
+        );
+        setActiveEditors((current) => ({ ...current, [surface]: focusTarget }));
+      }
+    },
+    [applyOperation, runtime.store]
+  );
+
   const handleUndo = useCallback(() => {
     const result = runtime.store.undo();
     if (!result.ok) {
@@ -265,6 +370,7 @@ export function App() {
         onContentChange={handleContentChange}
         onSelectionChange={handleSelectionChange}
         onToggleCollapsed={handleToggleCollapsed}
+        onStructuralKey={handleStructuralKey}
       />
       <section className="canvas-pane">
         <SpikeCanvas
@@ -282,6 +388,7 @@ export function App() {
           onSelectTheme={handleSelectTheme}
           onUndo={handleUndo}
           onRedo={handleRedo}
+          onStructuralKey={handleStructuralKey}
           onViewportMeasured={handleCanvasViewportMeasured}
         />
       </section>
@@ -318,6 +425,13 @@ function safeGetFixtureNameFromUrl(): string | null {
   // Reject anything that isn't a safe fixture slug — don't throw, just
   // ignore it so a bad URL can't break initial render.
   return /^[a-z0-9-]+$/.test(raw) ? raw : null;
+}
+
+function generateNodeId(): NodeId {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return `n-${crypto.randomUUID().slice(0, 8)}`;
+  }
+  return `n-${Math.random().toString(36).slice(2, 10)}`;
 }
 
 async function loadFixtureDoc(fixtureName: string): Promise<Doc> {

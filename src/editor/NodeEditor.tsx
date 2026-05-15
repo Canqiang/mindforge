@@ -22,6 +22,14 @@ const nodeEditorExtensions = [
   })
 ];
 
+export type StructuralKey = 'enter' | 'tab' | 'shift-tab' | 'backspace-empty';
+
+export interface StructuralKeyEvent {
+  nodeId: NodeId;
+  surface: EditorSurface;
+  kind: StructuralKey;
+}
+
 interface NodeEditorProps {
   nodeId: NodeId;
   content: RichText;
@@ -29,8 +37,16 @@ interface NodeEditorProps {
   mirroredSelection: TextSelectionMirror | null;
   className?: string;
   ariaLabel: string;
+  /**
+   * Whether the editor should grab focus on mount. Slots set this to false
+   * when the editor is being mounted only because the opposite surface
+   * already owns the selection — auto-focusing the mirror would emit
+   * another selectionUpdate and overwrite the originating surface's mirror.
+   */
+  autoFocus?: boolean;
   onContentChange: (nodeId: NodeId, content: RichText, surface: EditorSurface) => void;
   onSelectionChange: (selection: TextSelectionMirror) => void;
+  onStructuralKey?: (event: StructuralKeyEvent) => void;
 }
 
 export function NodeEditor({
@@ -40,8 +56,10 @@ export function NodeEditor({
   mirroredSelection,
   className,
   ariaLabel,
+  autoFocus,
   onContentChange,
-  onSelectionChange
+  onSelectionChange,
+  onStructuralKey
 }: NodeEditorProps) {
   const [isComposing, setIsComposing] = useState(false);
   const isComposingRef = useRef(false);
@@ -49,22 +67,54 @@ export function NodeEditor({
   const isApplyingMirrorRef = useRef(false);
   const onContentChangeRef = useRef(onContentChange);
   const onSelectionChangeRef = useRef(onSelectionChange);
+  const onStructuralKeyRef = useRef(onStructuralKey);
   const lastSignatureRef = useRef(richTextSignature(content));
   const editorClassName = useMemo(() => ['node-editor', `node-editor-${surface}`, className].filter(Boolean).join(' '), [className, surface]);
 
   useEffect(() => {
     onContentChangeRef.current = onContentChange;
     onSelectionChangeRef.current = onSelectionChange;
-  }, [onContentChange, onSelectionChange]);
+    onStructuralKeyRef.current = onStructuralKey;
+  }, [onContentChange, onSelectionChange, onStructuralKey]);
 
   const editor = useEditor(
     {
       extensions: nodeEditorExtensions,
       content: toTiptapContent(content),
+      autofocus: autoFocus ? 'end' : false,
       editorProps: {
         attributes: {
           class: editorClassName,
           'aria-label': ariaLabel
+        },
+        handleKeyDown: (view, event) => {
+          if (isComposingRef.current) {
+            return false;
+          }
+          const callback = onStructuralKeyRef.current;
+          if (!callback) {
+            return false;
+          }
+          if (event.key === 'Enter' && !event.shiftKey && !event.ctrlKey && !event.metaKey) {
+            event.preventDefault();
+            callback({ nodeId, surface, kind: 'enter' });
+            return true;
+          }
+          if (event.key === 'Tab') {
+            event.preventDefault();
+            callback({
+              nodeId,
+              surface,
+              kind: event.shiftKey ? 'shift-tab' : 'tab'
+            });
+            return true;
+          }
+          if (event.key === 'Backspace' && view.state.doc.textContent.length === 0) {
+            event.preventDefault();
+            callback({ nodeId, surface, kind: 'backspace-empty' });
+            return true;
+          }
+          return false;
         }
       },
       onUpdate({ editor: activeEditor }) {

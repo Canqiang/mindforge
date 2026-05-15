@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { getPlainText, type Doc, type NodeId, type RichText } from '../core';
+import type { StructuralKeyEvent } from '../editor/NodeEditor';
 import { NodeEditorSlot } from '../editor/NodeEditorSlot';
 import type { EditorSurface, TextSelectionMirror } from '../editor/selection';
 import type { LayoutNode, LayoutResult } from '../layout';
@@ -20,6 +21,7 @@ interface SpikeCanvasProps {
   onSelectTheme: (themeId: string) => void;
   onUndo: () => void;
   onRedo: () => void;
+  onStructuralKey: (event: StructuralKeyEvent) => void;
   onViewportMeasured: () => void;
 }
 
@@ -59,6 +61,7 @@ export function SpikeCanvas({
   onSelectTheme,
   onUndo,
   onRedo,
+  onStructuralKey,
   onViewportMeasured
 }: SpikeCanvasProps) {
   const [viewport, setViewport] = useState<Viewport>({ x: 0, y: 0, scale: 1 });
@@ -347,6 +350,7 @@ export function SpikeCanvas({
                   onActivate={onActivateEditor}
                   onContentChange={onContentChange}
                   onSelectionChange={onSelectionChange}
+                  onStructuralKey={onStructuralKey}
                 />
               ) : (
                 layoutNode.id
