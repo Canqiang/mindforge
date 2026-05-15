@@ -40,8 +40,15 @@ export function NodeEditor({
 }: NodeEditorProps) {
   const isComposingRef = useRef(false);
   const isApplyingMirrorRef = useRef(false);
+  const onContentChangeRef = useRef(onContentChange);
+  const onSelectionChangeRef = useRef(onSelectionChange);
   const lastContentJsonRef = useRef(JSON.stringify(content));
   const editorClassName = useMemo(() => ['node-editor', `node-editor-${surface}`, className].filter(Boolean).join(' '), [className, surface]);
+
+  useEffect(() => {
+    onContentChangeRef.current = onContentChange;
+    onSelectionChangeRef.current = onSelectionChange;
+  }, [onContentChange, onSelectionChange]);
 
   const editor = useEditor(
     {
@@ -56,13 +63,13 @@ export function NodeEditor({
       onUpdate({ editor: activeEditor }) {
         const nextContent = activeEditor.getJSON() as RichText;
         lastContentJsonRef.current = JSON.stringify(nextContent);
-        onContentChange(nodeId, nextContent, surface);
+        onContentChangeRef.current(nodeId, nextContent, surface);
       },
       onSelectionUpdate({ editor: activeEditor }) {
         if (isApplyingMirrorRef.current) {
           return;
         }
-        onSelectionChange(
+        onSelectionChangeRef.current(
           createSelectionMirror({
             nodeId,
             from: activeEditor.state.selection.from,
@@ -74,13 +81,13 @@ export function NodeEditor({
         );
       }
     },
-    [ariaLabel, editorClassName, nodeId, onContentChange, onSelectionChange, surface]
+    [editorClassName, nodeId, surface]
   );
 
   const contentJson = JSON.stringify(content);
 
   useEffect(() => {
-    if (!editor || contentJson === lastContentJsonRef.current) {
+    if (!editor || editor.isDestroyed || contentJson === lastContentJsonRef.current) {
       return;
     }
 
@@ -92,7 +99,7 @@ export function NodeEditor({
   }, [content, contentJson, editor]);
 
   useEffect(() => {
-    if (!editor || !shouldMirrorSelection(mirroredSelection, nodeId, surface)) {
+    if (!editor || editor.isDestroyed || !shouldMirrorSelection(mirroredSelection, nodeId, surface)) {
       return;
     }
 
@@ -104,6 +111,13 @@ export function NodeEditor({
       isApplyingMirrorRef.current = false;
     });
   }, [editor, mirroredSelection, nodeId, surface]);
+
+  useEffect(() => {
+    if (!editor || editor.isDestroyed) {
+      return;
+    }
+    editor.view.dom.setAttribute('aria-label', ariaLabel);
+  }, [ariaLabel, editor]);
 
   return (
     <EditorContent

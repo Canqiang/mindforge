@@ -5,7 +5,7 @@ import reactHooks from 'eslint-plugin-react-hooks';
 
 export default tseslint.config(
   {
-    ignores: ['dist/**', 'node_modules/**', 'examples/**', 'pnpm-lock.yaml']
+    ignores: ['dist/**', 'node_modules/**', 'examples/**', 'pnpm-lock.yaml', 'test-results/**', 'playwright-report/**']
   },
   js.configs.recommended,
   ...tseslint.configs.recommended,
@@ -114,7 +114,7 @@ export default tseslint.config(
     }
   },
   {
-    files: ['scripts/**/*.mjs', 'vite.config.ts', 'eslint.config.js'],
+    files: ['scripts/**/*.mjs', 'tests/**/*.ts', 'vite.config.ts', 'playwright.config.ts', 'eslint.config.js'],
     languageOptions: {
       globals: {
         process: 'readonly',
