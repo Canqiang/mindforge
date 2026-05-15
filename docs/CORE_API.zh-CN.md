@@ -34,7 +34,7 @@
 export type { Doc, Node, FreeEdge, NodeId, EdgeId };
 export type { DocOperation, OpOrigin, ApplyResult, ApplyOptions, ValidationResult };
 export { createEmptyDoc, validateDoc, repairDoc };
-export { applyDocOp, applyDocTransaction, invertDocOperation };
+export { applyDocOp, applyDocTransaction };
 export { selectNode, selectChildIds, selectSubtree, selectPath };
 export { createTextDoc, getPlainText, isRichText, richTextSignature };
 export { createCoreStore };
@@ -42,6 +42,10 @@ export { createCoreStore };
 
 `richTextSignature(content)` 产出 key 顺序稳定的字符串签名，供编辑器桥用来判断「这是不是我自己刚发的更新」。
 不要把它当持久化字段写进 doc——它只是回灌防抖的临时键。
+
+撤销不是独立 API。`applyDocOp` / `applyDocTransaction` 在成功 result 里附 `inverseOps`，
+调用方（通常是 `CoreStore`）入栈，回滚时再 apply 一次即可。没有 `invertDocOperation` 这种「不 apply 也能算 inverse」
+的入口——一次未应用就计算 inverse 没有现实场景，写出来语义还容易错位。
 
 不允许跨模块 import：
 

@@ -51,6 +51,32 @@ export function SpikeCanvas({
   const [viewportMeasured, setViewportMeasured] = useState(false);
   const canvasRef = useRef<HTMLDivElement | null>(null);
   const panRef = useRef<{ pointerId: number; x: number; y: number; viewport: Viewport } | null>(null);
+  const pendingViewportRef = useRef<Viewport | null>(null);
+  const rafIdRef = useRef<number | null>(null);
+
+  const scheduleViewport = (next: Viewport) => {
+    pendingViewportRef.current = next;
+    if (rafIdRef.current !== null) {
+      return;
+    }
+    rafIdRef.current = requestAnimationFrame(() => {
+      rafIdRef.current = null;
+      const target = pendingViewportRef.current;
+      pendingViewportRef.current = null;
+      if (target) {
+        setViewport(target);
+      }
+    });
+  };
+
+  useEffect(() => {
+    return () => {
+      if (rafIdRef.current !== null) {
+        cancelAnimationFrame(rafIdRef.current);
+        rafIdRef.current = null;
+      }
+    };
+  }, []);
   const mirroredNodeId = mirroredSelection?.nodeId ?? null;
   const world = useMemo(
     () => ({
@@ -107,6 +133,43 @@ export function SpikeCanvas({
     };
   }, [onViewportMeasured]);
 
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) {
+      return;
+    }
+    // React's synthetic wheel handler is registered passive by the runtime,
+    // which makes preventDefault() a no-op in some browsers. Attach the
+    // native listener ourselves with passive: false so we can stop the page
+    // from scrolling while the user pans or zooms inside the canvas.
+    const handleWheel = (event: WheelEvent) => {
+      event.preventDefault();
+      if (event.ctrlKey || event.metaKey) {
+        const delta = event.deltaY > 0 ? -0.08 : 0.08;
+        setViewport((current) => ({
+          ...current,
+          scale: Math.min(1.8, Math.max(0.45, Number((current.scale + delta).toFixed(2))))
+        }));
+        return;
+      }
+      const base = pendingViewportRef.current ?? null;
+      setViewport((current) => {
+        const start = base ?? current;
+        const next: Viewport = {
+          ...start,
+          x: start.x - event.deltaX,
+          y: start.y - event.deltaY
+        };
+        pendingViewportRef.current = next;
+        return next;
+      });
+    };
+    canvas.addEventListener('wheel', handleWheel, { passive: false });
+    return () => {
+      canvas.removeEventListener('wheel', handleWheel);
+    };
+  }, []);
+
   return (
     <div
       ref={canvasRef}
@@ -134,7 +197,7 @@ export function SpikeCanvas({
         if (!pan || pan.pointerId !== event.pointerId) {
           return;
         }
-        setViewport({
+        scheduleViewport({
           ...pan.viewport,
           x: pan.viewport.x + event.clientX - pan.x,
           y: pan.viewport.y + event.clientY - pan.y
@@ -144,22 +207,6 @@ export function SpikeCanvas({
         if (panRef.current?.pointerId === event.pointerId) {
           panRef.current = null;
         }
-      }}
-      onWheel={(event) => {
-        if (event.ctrlKey || event.metaKey) {
-          event.preventDefault();
-          const delta = event.deltaY > 0 ? -0.08 : 0.08;
-          setViewport((current) => ({
-            ...current,
-            scale: Math.min(1.8, Math.max(0.45, Number((current.scale + delta).toFixed(2))))
-          }));
-          return;
-        }
-        setViewport((current) => ({
-          ...current,
-          x: current.x - event.deltaX,
-          y: current.y - event.deltaY
-        }));
       }}
     >
       <div className="canvas-toolbar" aria-label="Canvas viewport controls">
@@ -179,7 +226,10 @@ export function SpikeCanvas({
         style={{
           width: world.width,
           height: world.height,
-          transform: `translate3d(${Math.round(viewport.x)}px, ${Math.round(viewport.y)}px, 0) scale(${viewport.scale})`
+          // Avoid Math.round() here: when scale != 1 the integer translate is
+          // multiplied into a non-integer world coordinate and we get subpixel
+          // shimmer on every pan tick. Sub-pixel translates render fine.
+          transform: `translate3d(${viewport.x}px, ${viewport.y}px, 0) scale(${viewport.scale})`
         }}
       >
         <svg className="spike-edges" width={world.width} height={world.height} aria-hidden="true">

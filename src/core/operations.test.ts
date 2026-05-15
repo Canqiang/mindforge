@@ -403,6 +403,56 @@ describe('core doc operations', () => {
     broken.rootId = 'does-not-exist';
     expect(() => createCoreStore(broken)).toThrow(/initial doc is invalid/i);
   });
+
+  // Pins the current decision (CORE_API §10): free-edge self-loops are allowed.
+  // If we ever flip this, this test must flip with the schema change.
+  it('addFreeEdge accepts self-loops (fromNodeId === toNodeId)', () => {
+    const doc = withNode(createEmptyDoc({ title: 'Root', now: 0 }), 'a', 'A', 'root');
+    const result = applyDocOp(
+      doc,
+      {
+        id: 'edge-self',
+        type: 'addFreeEdge',
+        edge: { id: 'self-a', fromNodeId: 'a', toNodeId: 'a', style: 'solid' }
+      },
+      context
+    );
+
+    expect(result.ok).toBe(true);
+    expect(result.doc?.edges['self-a']).toMatchObject({ fromNodeId: 'a', toNodeId: 'a' });
+    expect(validateDoc(result.doc!).ok).toBe(true);
+  });
+
+  it('moveNode to the same parent and same index leaves childIds unchanged', () => {
+    let doc = createEmptyDoc({ title: 'Root', now: 0 });
+    doc = withNode(doc, 'a', 'A', 'root');
+    doc = withNode(doc, 'b', 'B', 'root');
+    const beforeChildIds = [...doc.nodes.root.childIds];
+
+    const result = applyDocOp(doc, { id: 'move-noop', type: 'moveNode', nodeId: 'a', newParentId: 'root', index: 0 }, context);
+
+    expect(result.ok).toBe(true);
+    expect(result.doc?.nodes.root.childIds).toEqual(beforeChildIds);
+    expect(validateDoc(result.doc!).ok).toBe(true);
+  });
+
+  it('repairDoc cannot fix a missing rootId and surfaces the issue', () => {
+    const doc: Doc = {
+      version: 1,
+      rootId: 'ghost',
+      theme: 'default',
+      meta: { title: 't', createdAt: 0, updatedAt: 0 },
+      edges: {},
+      nodes: {
+        real: { id: 'real', parentId: null, childIds: [], content: createTextDoc('Real') }
+      }
+    };
+
+    const { validation, repaired } = repairDoc(doc);
+    expect(validation.ok).toBe(false);
+    expect(validation.issues.some((i) => i.path === 'rootId')).toBe(true);
+    expect(repaired).toEqual([]);
+  });
 });
 
 function withNode(doc: ReturnType<typeof createEmptyDoc>, id: string, label: string, parentId: string) {

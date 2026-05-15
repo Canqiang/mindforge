@@ -3,7 +3,7 @@ import { applyDocTransaction } from './operations';
 import type { ApplyResult, Doc, DocOperation, MindNode, NodeId, OpOrigin, Unsubscribe } from './types';
 import { validateDoc } from './validation';
 
-const EMPTY_CHILD_IDS: NodeId[] = [];
+const EMPTY_CHILD_IDS: NodeId[] = Object.freeze([] as NodeId[]) as NodeId[];
 
 interface HistoryEntry {
   label: string;

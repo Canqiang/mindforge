@@ -1,5 +1,6 @@
 export { createEmptyDoc } from './create-doc';
-export { applyDocOp, applyDocTransaction, invertDocOperation } from './operations';
+export { applyDocOp, applyDocTransaction } from './operations';
+export type { ApplyOptions } from './operations';
 export { createTextDoc, getPlainText, isRichText, richTextSignature } from './rich-text';
 export { selectChildIds, selectChildren, selectEdgesForNode, selectNode, selectPath, selectSubtree } from './selectors';
 export { createCoreStore } from './store';

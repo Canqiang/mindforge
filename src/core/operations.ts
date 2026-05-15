@@ -90,10 +90,6 @@ export function applyDocTransaction(
   return { ok: true, doc: next, inverseOps, validation };
 }
 
-export function invertDocOperation(doc: Doc, op: DocOperation): ApplyResult {
-  return applySingleDocOp(doc, op, { origin: 'test', timestamp: doc.meta.updatedAt, history: 'skip' });
-}
-
 function applySingleDocOp(doc: Doc, op: DocOperation, context: ApplyContext): ApplyResult {
   switch (op.type) {
     case 'insertNode':

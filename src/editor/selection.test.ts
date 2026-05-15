@@ -40,6 +40,10 @@ describe('selection bridge helpers', () => {
     expect(clampSelectionRange({ from: Number.NaN, to: 4 }, 8)).toEqual({ from: 1, to: 4 });
   });
 
+  it('clamps a fully NaN range to a collapsed caret at position 1', () => {
+    expect(clampSelectionRange({ from: Number.NaN, to: Number.NaN }, 8)).toEqual({ from: 1, to: 1 });
+  });
+
   it('formats selection bridge state for debug UI', () => {
     expect(formatSelectionMirror(null)).toBe('No mirrored selection');
     expect(

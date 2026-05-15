@@ -92,6 +92,7 @@ export function App() {
   }, [doc, measuredNodes]);
 
   useEffect(() => {
+    setBenchmarkReady(false);
     let secondFrame = 0;
     const firstFrame = requestAnimationFrame(() => {
       secondFrame = requestAnimationFrame(() => {
@@ -103,7 +104,7 @@ export function App() {
       cancelAnimationFrame(firstFrame);
       cancelAnimationFrame(secondFrame);
     };
-  }, [doc]);
+  }, [runtime.fixtureName]);
 
   const applyOperation = useCallback((op: DocOperation, origin: EditorSurface) => {
     const result = runtime.store.applyDocOp(op, origin);
