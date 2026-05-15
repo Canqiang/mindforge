@@ -118,7 +118,9 @@ function placeBranch(
     cursorY += size.height + VERTICAL_GAP;
 
     const child = doc.nodes[childId];
-    if (child?.childIds.length) {
+    // Collapsed nodes stay placed themselves so their parent's edge still
+    // lands on something visible, but we don't lay out their subtree.
+    if (child?.childIds.length && !child.collapsed) {
       placeSubtree(doc, measuredNodes, out, child.childIds, direction, out[childId], 1);
     }
   });
@@ -144,7 +146,7 @@ function placeSubtree(
     cursorY += size.height + VERTICAL_GAP;
 
     const child = doc.nodes[childId];
-    if (child?.childIds.length) {
+    if (child?.childIds.length && !child.collapsed) {
       placeSubtree(doc, measuredNodes, out, child.childIds, direction, out[childId], depth + 1);
     }
   });

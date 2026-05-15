@@ -12,6 +12,7 @@ interface SpikeCanvasProps {
   onActivateEditor: (surface: EditorSurface, nodeId: NodeId) => void;
   onContentChange: (nodeId: NodeId, content: RichText, surface: EditorSurface) => void;
   onSelectionChange: (selection: TextSelectionMirror) => void;
+  onToggleCollapsed: (nodeId: NodeId, next: boolean) => void;
   onViewportMeasured: () => void;
 }
 
@@ -44,6 +45,7 @@ export function SpikeCanvas({
   onActivateEditor,
   onContentChange,
   onSelectionChange,
+  onToggleCollapsed,
   onViewportMeasured
 }: SpikeCanvasProps) {
   const [viewport, setViewport] = useState<Viewport>({ x: 0, y: 0, scale: 1 });
@@ -251,17 +253,36 @@ export function SpikeCanvas({
         {visible.nodes.map((layoutNode) => {
           const node = doc.nodes[layoutNode.id];
           const title = node ? getPlainText(node.content) : layoutNode.id;
+          const hasChildren = node ? node.childIds.length > 0 : false;
+          const collapsed = Boolean(node?.collapsed);
           return (
             <div
               key={layoutNode.id}
               className="spike-node"
               data-root={layoutNode.id === doc.rootId}
+              data-collapsed={collapsed}
               style={{
                 width: layoutNode.width,
                 minHeight: layoutNode.height,
                 transform: `translate3d(${Math.round(layoutNode.x)}px, ${Math.round(layoutNode.y)}px, 0)`
               }}
             >
+              {node && hasChildren ? (
+                <button
+                  type="button"
+                  className="spike-node-chevron"
+                  data-collapsed={collapsed}
+                  aria-label={collapsed ? `Expand ${title}` : `Collapse ${title}`}
+                  aria-expanded={!collapsed}
+                  onPointerDown={(event) => event.stopPropagation()}
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    onToggleCollapsed(layoutNode.id, !collapsed);
+                  }}
+                >
+                  <span aria-hidden="true">▸</span>
+                </button>
+              ) : null}
               {node ? (
                 <NodeEditorSlot
                   nodeId={layoutNode.id}

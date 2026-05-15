@@ -163,6 +163,22 @@ export function App() {
     setCanvasViewportMeasured(true);
   }, []);
 
+  const handleToggleCollapsed = useCallback(
+    (nodeId: NodeId, next: boolean) => {
+      opSeqRef.current += 1;
+      applyOperation(
+        {
+          id: `collapse:${nodeId}:${opSeqRef.current}`,
+          type: 'setCollapsed',
+          nodeId,
+          collapsed: next ? true : undefined
+        },
+        'outline'
+      );
+    },
+    [applyOperation]
+  );
+
   return (
     <main
       className="app-shell"
@@ -179,6 +195,7 @@ export function App() {
         onActivateEditor={handleActivateEditor}
         onContentChange={handleContentChange}
         onSelectionChange={handleSelectionChange}
+        onToggleCollapsed={handleToggleCollapsed}
       />
       <section className="canvas-pane">
         <SpikeCanvas
@@ -189,6 +206,7 @@ export function App() {
           onActivateEditor={handleActivateEditor}
           onContentChange={handleContentChange}
           onSelectionChange={handleSelectionChange}
+          onToggleCollapsed={handleToggleCollapsed}
           onViewportMeasured={handleCanvasViewportMeasured}
         />
       </section>

@@ -10,6 +10,7 @@ interface OutlinePaneProps {
   onActivateEditor: (surface: EditorSurface, nodeId: NodeId) => void;
   onContentChange: (nodeId: NodeId, content: RichText, surface: EditorSurface) => void;
   onSelectionChange: (selection: TextSelectionMirror) => void;
+  onToggleCollapsed: (nodeId: NodeId, next: boolean) => void;
 }
 
 interface OutlineRow {
@@ -17,7 +18,7 @@ interface OutlineRow {
   depth: number;
 }
 
-export function OutlinePane({ doc, activeNodeId, mirroredSelection, onActivateEditor, onContentChange, onSelectionChange }: OutlinePaneProps) {
+export function OutlinePane({ doc, activeNodeId, mirroredSelection, onActivateEditor, onContentChange, onSelectionChange, onToggleCollapsed }: OutlinePaneProps) {
   const rows = useMemo(() => flattenOutlineRows(doc), [doc]);
 
   return (
@@ -38,6 +39,7 @@ export function OutlinePane({ doc, activeNodeId, mirroredSelection, onActivateEd
             onActivateEditor={onActivateEditor}
             onContentChange={onContentChange}
             onSelectionChange={onSelectionChange}
+            onToggleCollapsed={onToggleCollapsed}
           />
         );
       })}
@@ -56,6 +58,7 @@ interface OutlineNodeRowProps {
   onActivateEditor: (surface: EditorSurface, nodeId: NodeId) => void;
   onContentChange: (nodeId: NodeId, content: RichText, surface: EditorSurface) => void;
   onSelectionChange: (selection: TextSelectionMirror) => void;
+  onToggleCollapsed: (nodeId: NodeId, next: boolean) => void;
 }
 
 const OutlineNodeRow = memo(function OutlineNodeRow({
@@ -65,14 +68,30 @@ const OutlineNodeRow = memo(function OutlineNodeRow({
   mirroredSelection,
   onActivateEditor,
   onContentChange,
-  onSelectionChange
+  onSelectionChange,
+  onToggleCollapsed
 }: OutlineNodeRowProps) {
   const title = getPlainText(node.content) || 'Untitled';
+  const hasChildren = node.childIds.length > 0;
+  const collapsed = Boolean(node.collapsed);
 
   return (
     <div className="outline-node" style={{ '--outline-depth': depth } as CSSProperties}>
       <div className="outline-node-row">
-        <span className="outline-bullet" aria-hidden="true" />
+        {hasChildren ? (
+          <button
+            type="button"
+            className="outline-chevron"
+            data-collapsed={collapsed}
+            aria-label={collapsed ? `Expand ${title}` : `Collapse ${title}`}
+            aria-expanded={!collapsed}
+            onClick={() => onToggleCollapsed(node.id, !collapsed)}
+          >
+            <span aria-hidden="true">▸</span>
+          </button>
+        ) : (
+          <span className="outline-bullet" aria-hidden="true" />
+        )}
         <NodeEditorSlot
           nodeId={node.id}
           content={node.content}

@@ -44,6 +44,28 @@ test('benchmark canvas culls offscreen nodes without breaking edit mirror', asyn
   await expect(slot(page, 'canvas', 'node-1')).toContainText('Culling keeps mirror editable');
 });
 
+test('outline chevron collapses a subtree on both panes', async ({ page }) => {
+  // node-1 has children (outline-content, outline-selection in the spike seed).
+  const outlineChevron = slot(page, 'outline', 'node-1').locator('xpath=preceding-sibling::button[@class="outline-chevron"]');
+  await expect(outlineChevron).toHaveAttribute('aria-expanded', 'true');
+
+  // The first child should be visible in the outline before collapse.
+  await expect(page.locator('[data-node-id="outline-content"][data-editor-surface="outline"]')).toBeVisible();
+
+  await outlineChevron.click();
+
+  await expect(outlineChevron).toHaveAttribute('aria-expanded', 'false');
+  await expect(page.locator('[data-node-id="outline-content"][data-editor-surface="outline"]')).toHaveCount(0);
+
+  // Canvas pane: the corresponding child should also disappear from the layout.
+  await expect(page.locator('[data-node-id="outline-content"][data-editor-surface="canvas"]')).toHaveCount(0);
+
+  // Expanding restores the children on both panes.
+  await outlineChevron.click();
+  await expect(outlineChevron).toHaveAttribute('aria-expanded', 'true');
+  await expect(page.locator('[data-node-id="outline-content"][data-editor-surface="outline"]')).toBeVisible();
+});
+
 async function activateEditor(page: Page, surface: 'outline' | 'canvas', nodeId: string) {
   await slot(page, surface, nodeId).click();
   const activeEditor = editor(page, surface, nodeId);
