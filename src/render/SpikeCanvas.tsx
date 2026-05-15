@@ -53,6 +53,11 @@ export function SpikeCanvas({
   const panRef = useRef<{ pointerId: number; x: number; y: number; viewport: Viewport } | null>(null);
   const pendingViewportRef = useRef<Viewport | null>(null);
   const rafIdRef = useRef<number | null>(null);
+  // Mirror of viewport state so the native wheel listener (which lives in a
+  // useEffect with no deps) can read the latest snapshot without closing over
+  // stale state.
+  const viewportRef = useRef<Viewport>(viewport);
+  viewportRef.current = viewport;
 
   const scheduleViewport = (next: Viewport) => {
     pendingViewportRef.current = next;
@@ -146,22 +151,22 @@ export function SpikeCanvas({
       event.preventDefault();
       if (event.ctrlKey || event.metaKey) {
         const delta = event.deltaY > 0 ? -0.08 : 0.08;
+        // Zoom is low-frequency; sync setViewport with the functional form
+        // accumulates correctly even if the user mashes ctrl+wheel.
         setViewport((current) => ({
           ...current,
           scale: Math.min(1.8, Math.max(0.45, Number((current.scale + delta).toFixed(2))))
         }));
         return;
       }
+      // Trackpad pan emits wheel events at ~60Hz. Coalesce into one render
+      // per frame to keep visible-node culling cost flat.
       const base = pendingViewportRef.current ?? null;
-      setViewport((current) => {
-        const start = base ?? current;
-        const next: Viewport = {
-          ...start,
-          x: start.x - event.deltaX,
-          y: start.y - event.deltaY
-        };
-        pendingViewportRef.current = next;
-        return next;
+      const start = base ?? viewportRef.current;
+      scheduleViewport({
+        ...start,
+        x: start.x - event.deltaX,
+        y: start.y - event.deltaY
       });
     };
     canvas.addEventListener('wheel', handleWheel, { passive: false });
