@@ -1,6 +1,7 @@
 import { createStore } from 'zustand/vanilla';
 import { applyDocTransaction } from './operations';
 import type { ApplyResult, Doc, DocOperation, MindNode, NodeId, OpOrigin, Unsubscribe } from './types';
+import { validateDoc } from './validation';
 
 const EMPTY_CHILD_IDS: NodeId[] = [];
 
@@ -30,6 +31,13 @@ export interface CoreStore {
 }
 
 export function createCoreStore(initialDoc: Doc): CoreStore {
+  const initialValidation = validateDoc(initialDoc);
+  if (!initialValidation.ok) {
+    throw new Error(
+      `createCoreStore: initial doc is invalid: ${initialValidation.issues[0]?.path ?? 'unknown'}`
+    );
+  }
+
   const store = createStore<CoreStoreState>(() => ({
     doc: initialDoc,
     revision: 0,
@@ -40,11 +48,16 @@ export function createCoreStore(initialDoc: Doc): CoreStore {
   const applyTransaction = (ops: DocOperation[], origin: OpOrigin, recordHistory: boolean): ApplyResult => {
     const state = store.getState();
     const timestamp = Date.now();
-    const result = applyDocTransaction(state.doc, ops, {
-      origin,
-      timestamp,
-      history: recordHistory ? 'record' : 'skip'
-    });
+    const result = applyDocTransaction(
+      state.doc,
+      ops,
+      {
+        origin,
+        timestamp,
+        history: recordHistory ? 'record' : 'skip'
+      },
+      { skipInputValidation: true }
+    );
 
     if (!result.ok || !result.doc || !result.inverseOps) {
       return result;
@@ -85,11 +98,16 @@ export function createCoreStore(initialDoc: Doc): CoreStore {
         return { ok: true, doc: state.doc, inverseOps: [] };
       }
 
-      const result = applyDocTransaction(state.doc, entry.inverseOps, {
-        origin: 'history',
-        timestamp: Date.now(),
-        history: 'skip'
-      });
+      const result = applyDocTransaction(
+        state.doc,
+        entry.inverseOps,
+        {
+          origin: 'history',
+          timestamp: Date.now(),
+          history: 'skip'
+        },
+        { skipInputValidation: true }
+      );
 
       if (!result.ok || !result.doc) {
         return result;
@@ -111,11 +129,16 @@ export function createCoreStore(initialDoc: Doc): CoreStore {
         return { ok: true, doc: state.doc, inverseOps: [] };
       }
 
-      const result = applyDocTransaction(state.doc, entry.ops, {
-        origin: 'history',
-        timestamp: Date.now(),
-        history: 'skip'
-      });
+      const result = applyDocTransaction(
+        state.doc,
+        entry.ops,
+        {
+          origin: 'history',
+          timestamp: Date.now(),
+          history: 'skip'
+        },
+        { skipInputValidation: true }
+      );
 
       if (!result.ok || !result.doc) {
         return result;

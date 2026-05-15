@@ -22,22 +22,43 @@ import type {
 } from './types';
 import { validateDoc } from './validation';
 
-export function applyDocOp(doc: Doc, op: DocOperation, context: ApplyContext): ApplyResult {
-  return applyDocTransaction(doc, [op], context);
+export interface ApplyOptions {
+  /**
+   * Skip the upfront validateDoc on the input doc. Safe when the caller
+   * guarantees the doc is already validated (e.g. the in-memory store
+   * always feeds previously-applied output back in).
+   */
+  skipInputValidation?: boolean;
 }
 
-export function applyDocTransaction(doc: Doc, ops: DocOperation[], context: ApplyContext): ApplyResult {
-  const initialValidation = validateDoc(doc);
-  if (!initialValidation.ok) {
-    return {
-      ok: false,
-      error: {
-        code: 'VALIDATION_FAILED',
-        message: 'Cannot apply operation to an invalid document',
-        path: initialValidation.issues[0]?.path
-      },
-      validation: initialValidation
-    };
+export function applyDocOp(
+  doc: Doc,
+  op: DocOperation,
+  context: ApplyContext,
+  options?: ApplyOptions
+): ApplyResult {
+  return applyDocTransaction(doc, [op], context, options);
+}
+
+export function applyDocTransaction(
+  doc: Doc,
+  ops: DocOperation[],
+  context: ApplyContext,
+  options?: ApplyOptions
+): ApplyResult {
+  if (!options?.skipInputValidation) {
+    const initialValidation = validateDoc(doc);
+    if (!initialValidation.ok) {
+      return {
+        ok: false,
+        error: {
+          code: 'VALIDATION_FAILED',
+          message: 'Cannot apply operation to an invalid document',
+          path: initialValidation.issues[0]?.path
+        },
+        validation: initialValidation
+      };
+    }
   }
 
   let next = doc;
@@ -145,9 +166,26 @@ function applyDeleteSubtree(doc: Doc, op: DeleteSubtreeOp, context: ApplyContext
   const subtreeIds = new Set(subtree.map((item) => item.id));
   const parentId = node.parentId;
   const originalIndex = doc.nodes[parentId].childIds.indexOf(op.nodeId);
+  if (originalIndex < 0) {
+    return fail('INVALID_PARENT', `Parent "${parentId}" does not reference "${op.nodeId}"`, op.id, op.nodeId);
+  }
   const removedEdges = Object.fromEntries(
     subtree.flatMap((item) => selectEdgesForNode(doc, item.id)).filter(([, edge]) => subtreeIds.has(edge.fromNodeId) || subtreeIds.has(edge.toNodeId))
   );
+
+  const descendantIndex = new Map<NodeId, number>();
+  for (const item of subtree) {
+    if (item.id === op.nodeId) continue;
+    if (item.parentId === null) {
+      return fail('INVALID_PARENT', `Descendant "${item.id}" has no parent`, op.id, item.id);
+    }
+    const parent = doc.nodes[item.parentId];
+    const idx = parent?.childIds.indexOf(item.id) ?? -1;
+    if (idx < 0) {
+      return fail('INVALID_PARENT', `Parent "${item.parentId}" does not reference "${item.id}"`, op.id, item.id);
+    }
+    descendantIndex.set(item.id, idx);
+  }
 
   const next = produce(doc, (draft) => {
     draft.nodes[parentId].childIds = draft.nodes[parentId].childIds.filter((id) => id !== op.nodeId);
@@ -160,13 +198,16 @@ function applyDeleteSubtree(doc: Doc, op: DeleteSubtreeOp, context: ApplyContext
     touch(draft, context);
   });
 
-  const inverseOps: DocOperation[] = subtree.map((item) => ({
-    id: `${inverseId(op.id)}:insert:${item.id}`,
-    type: 'insertNode',
-    node: nodeToPayload(item),
-    parentId: item.id === op.nodeId ? parentId : item.parentId,
-    index: item.id === op.nodeId ? originalIndex : doc.nodes[item.parentId ?? '']?.childIds.indexOf(item.id) ?? 0
-  }));
+  const inverseOps: DocOperation[] = subtree.map((item) => {
+    const isSubtreeRoot = item.id === op.nodeId;
+    return {
+      id: `${inverseId(op.id)}:insert:${item.id}`,
+      type: 'insertNode',
+      node: nodeToPayload(item),
+      parentId: isSubtreeRoot ? parentId : (item.parentId as NodeId),
+      index: isSubtreeRoot ? originalIndex : (descendantIndex.get(item.id) as number)
+    };
+  });
 
   inverseOps.push(
     ...Object.values(removedEdges).map<AddFreeEdgeOp>((edge) => ({

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { applyDocOp, applyDocTransaction, createCoreStore, createEmptyDoc, createTextDoc, getPlainText, validateDoc } from './index';
-import type { ApplyContext, DocOperation } from './types';
+import { applyDocOp, applyDocTransaction, createCoreStore, createEmptyDoc, createTextDoc, getPlainText, repairDoc, validateDoc } from './index';
+import type { ApplyContext, Doc, DocOperation } from './types';
 
 const context: ApplyContext = { origin: 'test', timestamp: 100, history: 'record' };
 
@@ -278,6 +278,85 @@ describe('core doc operations', () => {
     unsubscribe();
 
     expect(notificationCount).toBe(2);
+  });
+
+  it('undoes a deleted subtree with grandchildren in original order', () => {
+    let doc = createEmptyDoc({ title: 'Root', now: 0 });
+    doc = withNode(doc, 'a', 'A', 'root');
+    doc = withNode(doc, 'a1', 'A1', 'a');
+    doc = withNode(doc, 'a2', 'A2', 'a');
+    doc = withNode(doc, 'a1-x', 'A1X', 'a1');
+    doc = withNode(doc, 'a1-y', 'A1Y', 'a1');
+    doc = withNode(doc, 'b', 'B', 'root');
+
+    const beforeIds = JSON.stringify({
+      root: doc.nodes.root.childIds,
+      a: doc.nodes.a.childIds,
+      a1: doc.nodes.a1.childIds,
+      a2: doc.nodes.a2.childIds
+    });
+
+    const deleted = applyDocOp(doc, { id: 'del-a', type: 'deleteSubtree', nodeId: 'a' }, context);
+    expect(deleted.ok).toBe(true);
+    expect(deleted.doc?.nodes.a).toBeUndefined();
+    expect(deleted.doc?.nodes.root.childIds).toEqual(['b']);
+
+    const restored = applyDocTransaction(deleted.doc!, deleted.inverseOps!, { ...context, history: 'skip' });
+    expect(restored.ok).toBe(true);
+    expect(validateDoc(restored.doc!).ok).toBe(true);
+    expect(
+      JSON.stringify({
+        root: restored.doc!.nodes.root.childIds,
+        a: restored.doc!.nodes.a.childIds,
+        a1: restored.doc!.nodes.a1.childIds,
+        a2: restored.doc!.nodes.a2.childIds
+      })
+    ).toBe(beforeIds);
+  });
+
+  it('reports a cycle once and skips the redundant unreachable issue', () => {
+    const doc: Doc = {
+      version: 1,
+      rootId: 'root',
+      theme: 'default',
+      meta: { title: 't', createdAt: 0, updatedAt: 0 },
+      edges: {},
+      nodes: {
+        root: { id: 'root', parentId: null, childIds: [], content: createTextDoc('Root') },
+        a: { id: 'a', parentId: 'b', childIds: ['b'], content: createTextDoc('A') },
+        b: { id: 'b', parentId: 'a', childIds: ['a'], content: createTextDoc('B') }
+      }
+    };
+
+    const result = validateDoc(doc);
+    expect(result.ok).toBe(false);
+    const cycles = result.issues.filter((issue) => issue.code === 'CYCLE_DETECTED');
+    const unreachable = result.issues.filter((issue) => issue.message === 'Node is not reachable from root');
+    expect(cycles.map((issue) => issue.path).sort()).toEqual(['nodes.a.parentId', 'nodes.b.parentId']);
+    expect(unreachable).toEqual([]);
+  });
+
+  it('repairDoc backfills missing childIds entries for orphan nodes', () => {
+    const doc: Doc = {
+      version: 1,
+      rootId: 'root',
+      theme: 'default',
+      meta: { title: 't', createdAt: 0, updatedAt: 0 },
+      edges: {},
+      nodes: {
+        root: { id: 'root', parentId: null, childIds: ['a'], content: createTextDoc('Root') },
+        a: { id: 'a', parentId: 'root', childIds: [], content: createTextDoc('A') },
+        // b's parentId points to root, but root.childIds forgot to list it
+        b: { id: 'b', parentId: 'root', childIds: [], content: createTextDoc('B') }
+      }
+    };
+
+    expect(validateDoc(doc).ok).toBe(false);
+
+    const { doc: repaired, validation, repaired: log } = repairDoc(doc);
+    expect(validation.ok).toBe(true);
+    expect(repaired.nodes.root.childIds).toContain('b');
+    expect(log.some((entry) => entry === 'nodes.root.childIds')).toBe(true);
   });
 });
 

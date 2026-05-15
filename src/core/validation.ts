@@ -60,25 +60,7 @@ export function validateDoc(doc: Doc): ValidationResult {
     add('VALIDATION_FAILED', 'nodes', 'Document must contain exactly one root node');
   }
 
-  const reachable = collectReachable(doc);
-  for (const nodeId of Object.keys(doc.nodes)) {
-    if (!reachable.has(nodeId)) {
-      add('VALIDATION_FAILED', `nodes.${nodeId}`, 'Node is not reachable from root');
-    }
-  }
-
-  for (const [nodeId, node] of Object.entries(doc.nodes)) {
-    const seen = new Set<NodeId>();
-    let current: NodeId | null = node.parentId;
-    while (current !== null) {
-      if (current === nodeId || seen.has(current)) {
-        add('CYCLE_DETECTED', `nodes.${nodeId}.parentId`, 'Node ancestry contains a cycle');
-        break;
-      }
-      seen.add(current);
-      current = doc.nodes[current]?.parentId ?? null;
-    }
-  }
+  classifyOrphans(doc, add);
 
   for (const [edgeId, edge] of Object.entries(doc.edges)) {
     if (edge.id !== edgeId) {
@@ -102,12 +84,39 @@ export function repairDoc(doc: Doc): { doc: Doc; validation: ValidationResult; r
   const next = structuredClone(doc);
   const repaired: string[] = [];
 
+  // Pass 1: drop childIds entries that don't agree with their target's parentId
+  // (duplicates, missing nodes, or parentId pointing elsewhere).
   for (const [nodeId, node] of Object.entries(next.nodes)) {
-    const unique = Array.from(new Set(node.childIds)).filter((childId) => next.nodes[childId]?.parentId === nodeId);
+    const unique = Array.from(new Set(node.childIds)).filter(
+      (childId) => next.nodes[childId]?.parentId === nodeId
+    );
     if (unique.length !== node.childIds.length) {
       node.childIds = unique;
       repaired.push(`nodes.${nodeId}.childIds`);
     }
+  }
+
+  // Pass 2: backfill orphans where parentId is set correctly but the parent's
+  // childIds doesn't include the node. Append in stable id order so the result
+  // is deterministic across runs.
+  const missing = new Map<NodeId, NodeId[]>();
+  const orderedIds = Object.keys(next.nodes).sort();
+  for (const nodeId of orderedIds) {
+    const node = next.nodes[nodeId];
+    if (node.parentId === null) continue;
+    const parent = next.nodes[node.parentId];
+    if (!parent) continue;
+    if (parent.childIds.includes(nodeId)) continue;
+    const bucket = missing.get(node.parentId);
+    if (bucket) {
+      bucket.push(nodeId);
+    } else {
+      missing.set(node.parentId, [nodeId]);
+    }
+  }
+  for (const [parentId, childIds] of missing) {
+    next.nodes[parentId].childIds.push(...childIds);
+    repaired.push(`nodes.${parentId}.childIds`);
   }
 
   for (const [edgeId, edge] of Object.entries(next.edges)) {
@@ -122,13 +131,85 @@ export function repairDoc(doc: Doc): { doc: Doc; validation: ValidationResult; r
 
 function collectReachable(doc: Doc): Set<NodeId> {
   const reachable = new Set<NodeId>();
-  const visit = (nodeId: NodeId) => {
-    if (reachable.has(nodeId)) {
-      return;
+  if (!doc.nodes[doc.rootId]) {
+    return reachable;
+  }
+  const stack: NodeId[] = [doc.rootId];
+  while (stack.length > 0) {
+    const current = stack.pop() as NodeId;
+    if (reachable.has(current)) {
+      continue;
     }
-    reachable.add(nodeId);
-    doc.nodes[nodeId]?.childIds.forEach(visit);
-  };
-  visit(doc.rootId);
+    reachable.add(current);
+    const node = doc.nodes[current];
+    if (!node) continue;
+    for (const childId of node.childIds) {
+      if (!reachable.has(childId)) {
+        stack.push(childId);
+      }
+    }
+  }
   return reachable;
+}
+
+function classifyOrphans(
+  doc: Doc,
+  add: (code: CoreErrorCode, path: string, message: string) => void
+): void {
+  const reachable = collectReachable(doc);
+  type State = 'cycle' | 'unreachable';
+  const state = new Map<NodeId, State>();
+
+  for (const nodeId of Object.keys(doc.nodes)) {
+    if (reachable.has(nodeId) || state.has(nodeId)) {
+      continue;
+    }
+    const path: NodeId[] = [];
+    const onPath = new Set<NodeId>();
+    let current: NodeId | null = nodeId;
+    let inferred: State | null = null;
+
+    while (current !== null) {
+      if (reachable.has(current)) {
+        inferred = 'unreachable';
+        break;
+      }
+      if (state.has(current)) {
+        inferred = state.get(current) as State;
+        break;
+      }
+      if (onPath.has(current)) {
+        inferred = 'cycle';
+        const cycleStart = path.indexOf(current);
+        for (let i = cycleStart; i < path.length; i++) {
+          state.set(path[i], 'cycle');
+        }
+        for (let i = 0; i < cycleStart; i++) {
+          state.set(path[i], 'cycle');
+        }
+        path.length = cycleStart;
+        break;
+      }
+      onPath.add(current);
+      path.push(current);
+      current = doc.nodes[current]?.parentId ?? null;
+    }
+
+    if (inferred === null) {
+      inferred = 'unreachable';
+    }
+    for (const id of path) {
+      if (!state.has(id)) {
+        state.set(id, inferred);
+      }
+    }
+  }
+
+  for (const [nodeId, kind] of state) {
+    if (kind === 'cycle') {
+      add('CYCLE_DETECTED', `nodes.${nodeId}.parentId`, 'Node ancestry contains a cycle');
+    } else {
+      add('VALIDATION_FAILED', `nodes.${nodeId}`, 'Node is not reachable from root');
+    }
+  }
 }
