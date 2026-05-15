@@ -1,0 +1,107 @@
+:root {
+  color-scheme: light;
+  font-family:
+    Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --mf-bg: #f6f7f9;
+  --mf-panel: #ffffff;
+  --mf-ink: #1e2329;
+  --mf-muted: #68707c;
+  --mf-border: #d9dee7;
+  --mf-accent: #2f6fed;
+  --mf-node: #ffffff;
+  --mf-node-border: #b9c7dc;
+  --mf-edge: #8d9bb0;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-width: 960px;
+  min-height: 100vh;
+  color: var(--mf-ink);
+  background: var(--mf-bg);
+}
+
+button,
+input,
+textarea {
+  font: inherit;
+}
+
+.app-shell {
+  display: grid;
+  grid-template-columns: 320px 1fr;
+  min-height: 100vh;
+}
+
+.outline-pane {
+  border-right: 1px solid var(--mf-border);
+  background: var(--mf-panel);
+  padding: 24px;
+}
+
+.outline-pane h1 {
+  margin: 12px 0 20px;
+  font-size: 22px;
+}
+
+.outline-pane ol {
+  margin: 0;
+  padding-left: 20px;
+  color: var(--mf-muted);
+  line-height: 1.8;
+}
+
+.pane-label {
+  color: var(--mf-muted);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.canvas-pane {
+  min-width: 0;
+  overflow: hidden;
+}
+
+.spike-canvas {
+  position: relative;
+  width: 100%;
+  height: 100vh;
+  overflow: hidden;
+  background-image:
+    linear-gradient(rgba(141, 155, 176, 0.16) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(141, 155, 176, 0.16) 1px, transparent 1px);
+  background-size: 32px 32px;
+}
+
+.spike-edges {
+  position: absolute;
+  inset: 0;
+  overflow: visible;
+  pointer-events: none;
+}
+
+.spike-node {
+  position: absolute;
+  display: grid;
+  align-content: center;
+  min-height: 56px;
+  padding: 12px 16px;
+  border: 1px solid var(--mf-node-border);
+  border-radius: 8px;
+  background: var(--mf-node);
+  box-shadow: 0 10px 24px rgba(31, 41, 55, 0.08);
+  color: var(--mf-ink);
+  font-size: 14px;
+}
+
+.spike-node[data-root='true'] {
+  border-color: color-mix(in srgb, var(--mf-accent), white 35%);
+  color: var(--mf-accent);
+  font-weight: 700;
+}
