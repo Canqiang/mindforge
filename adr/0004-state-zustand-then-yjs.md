@@ -71,7 +71,9 @@ So the goal is not "drop-in", it is: **the op-based mutation API stays the same;
 ```ts
 // core/store.ts — single mutation entrypoint, regardless of backend
 export interface CoreStore {
-  applyDocOp(op: DocOperation, origin: OpOrigin): ApplyResult;  // origin = forward-compat for CRDT
+  getDoc(): Doc;                                                 // synchronous snapshot for useSyncExternalStore
+  subscribe(fn: () => void): Unsubscribe;                        // fires on doc identity change; no fire-on-subscribe
+  applyDocOp(op: DocOperation, origin: OpOrigin): ApplyResult;   // origin = forward-compat for CRDT
   applyDocTransaction(ops: DocOperation[], origin: OpOrigin): ApplyResult;
   undo(scope?: 'local' | 'global'): ApplyResult;                 // scope = explicit for forward-compat
   redo(scope?: 'local' | 'global'): ApplyResult;
@@ -81,6 +83,8 @@ export interface CoreStore {
 ```
 
 Both Zustand and a CRDT can implement this interface. In Phase 1 `origin` is ignored and `scope` defaults to `global`. In Phase 2 they become meaningful.
+
+`getDoc` + `subscribe` are the React 18+ `useSyncExternalStore` pair. They are not a hidden full-doc subscription channel — Phase 2 CRDT-backed stores still implement them by surfacing the local snapshot and firing on local apply / remote sync.
 
 ### 中文
 
@@ -116,6 +120,7 @@ Both Zustand and a CRDT can implement this interface. In Phase 1 `origin` is ign
 - The v0.1 `core/store.ts` is written with a fake CRDT-shaped transaction log so the diff to Y.js / Loro is visibly small.
 - Document the migration contract in `src/core/README.md` so v0.3 work has a checklist.
 - v0.2 includes a "CRDT bake-off" spike: implement the doc model in both Y.js and Loro, compare undo / awareness / sync ergonomics, decide.
+- **v0.1-spike addendum (2026-05-15):** during the spike pass we observed that `App` was holding a `useState(doc)` copy *in addition to* `store.getDoc()`, which would diverge under Phase 2 async transactions. We deleted the local copy and switched `App` to `useSyncExternalStore(store.subscribe, store.getDoc)`. Slice-level subscriptions (`subscribeNode` etc.) are still the long-term goal — tracked as a v0.1-release exit task in [STATE_MODEL §8](../docs/STATE_MODEL.zh-CN.md#8-store-公开访问).
 
 ### 中文
 

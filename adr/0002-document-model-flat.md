@@ -95,7 +95,7 @@ interface Node {
 **Mitigations**
 
 - All mutations go through `core.applyDocOp(doc, op, context)`. No component is allowed to mutate `doc.nodes` directly.
-- Validation pass on import / load asserts every `parentId` ↔ `childIds` pair is consistent and fixes drift.
+- Validation pass on import / load asserts every `parentId` ↔ `childIds` pair is consistent and fixes drift. **Implemented in `repairDoc` (v0.1-spike):** Pass 1 drops `childIds` entries whose target doesn't agree; Pass 2 appends orphans whose `parentId` is correct but whose parent's `childIds` is missing the entry. Repair report lists every node path touched. See [CORE_API §6](../docs/CORE_API.zh-CN.md#6-validation).
 - `core/select.ts` memoizes derived views (`childrenOf`, `pathTo`, `subtreeOf`) keyed on the relevant slice.
 - The selection-sync mechanism is the most important spike deliverable — see [DESIGN §3](../docs/DESIGN.md#3-v01-spike-validate-the-lynchpin).
 
@@ -119,6 +119,6 @@ interface Node {
 **缓解措施**
 
 - 所有变更走 `core.applyDocOp(doc, op, context)`。任何组件都不允许直接 mutate `doc.nodes`。
-- 导入 / 加载时做校验，断言每对 `parentId` ↔ `childIds` 一致并修正漂移。
+- 导入 / 加载时做校验，断言每对 `parentId` ↔ `childIds` 一致并修正漂移。**已在 v0.1-spike 阶段实现于 `repairDoc`**：Pass 1 丢掉 `childIds` 里指向不一致目标的项；Pass 2 把 `parentId` 指向正确但 parent.childIds 漏列的孤儿 append 进去。修复报告会列出每个被改动的节点路径。详见 [CORE_API §6](../docs/CORE_API.zh-CN.md#6-validation)。
 - `core/select.ts` 对派生视图（`childrenOf`、`pathTo`、`subtreeOf`）按相关切片做 memo。
 - 选区同步机制是 spike 最重要的交付物——见 [DESIGN §3](../docs/DESIGN.zh-CN.md#3-v01-spike验证命门)。

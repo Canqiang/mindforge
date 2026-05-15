@@ -114,6 +114,23 @@ interface EditorBridgeState {
 - 在 IME composition 期间延迟或合并 mirror。
 - 记录最近一次 selection mirror，便于 debug。
 
+### v0.1-spike 实现现状
+
+EditorBridgeState 在 spike 阶段是**分散在 `src/editor/NodeEditor.tsx` 的 ref + state**，不是集中式 store。
+等 v0.1-release 阶段稳定再上集中式 hook。当前各项实现状态：
+
+| 字段 / 能力 | 实现方式 | 文件 |
+|---|---|---|
+| **origin 标签** | `applyDocOp(op, origin)` 把 `EditorSurface` 当 `OpOrigin` 传进 store | `src/app.tsx` 的 `applyOperation` |
+| **回环防抖** | `richTextSignature(content)` 稳定签名比较，匹配则跳过 setContent | `src/editor/NodeEditor.tsx` `lastSignatureRef` |
+| **IME composition guard** | `useState(isComposing)` + setContent effect 依赖 `isComposing`，composition 结束自动补同步 | `src/editor/NodeEditor.tsx` |
+| **selection mirror 防回环** | `isApplyingMirrorRef` 在程序化 `setTextSelection` 期间屏蔽 `onSelectionUpdate` | `src/editor/NodeEditor.tsx` |
+| **suppressedOrigins** | 暂未集中实现——目前依赖 signature + isApplyingMirror 两道闸门 | — |
+| **activeComposition / lastMirroredSelection** | 暂未集中实现；调试用 `formatSelectionMirror` 把当前 `TextSelectionMirror` 投到 `.bridge-status` | `src/editor/selection.ts` |
+
+未实现的字段不是因为不需要，是因为 spike 阶段「signature + isApplyingMirror + isComposing」已经足以挡住死循环；
+集中式 EditorBridgeState 等 v0.1-release 引入「多 surface 同时编辑」或「AI 流式 patch」时再补。
+
 ## 6. HistoryState
 
 内容 undo 只追踪 `DocOperation`：
@@ -158,7 +175,7 @@ type AppOperation = DocOperation | ViewOperation;
 
 ## 8. Store 公开访问
 
-UI 不应该订阅整份 doc。优先暴露这些 hook / selector：
+终态目标：UI 不订阅整份 doc，优先暴露这些 hook / selector：
 
 ```ts
 useNode(nodeId)
@@ -172,9 +189,24 @@ useLayoutNode(nodeId)
 
 限制：
 
-- `useDoc()` 只允许 debug、import/export、devtools 使用。
+- `useDoc()` **在 v0.1-release 及之后**只允许 debug、import/export、devtools 使用。
 - 普通节点组件必须按 `NodeId` 订阅自己的 slice。
 - layout 可以读取必要的 doc 派生结构，但必须 memo。
+
+### v0.1-spike 例外条款
+
+spike 阶段 App 通过 `useSyncExternalStore(store.subscribe, store.getDoc)` 订阅**整份 doc**，
+并把 doc 当 prop 传给 OutlinePane / SpikeCanvas。这是有意识接受的折衷：
+
+- 好处：一次性消灭「`useState(doc)` + `setDoc(result.doc)`」的 dual source of truth；
+  store 是唯一事实源，为后续换 CRDT 留口子。
+- 代价：每次 op 都让 App 整棵重渲染。但是 (a) Outline 的子行有 memo，(b) Canvas 已经有 viewport culling，
+  spike benchmark 显示 1000 节点 fixture 仍然过线。
+- 退出条件：v0.1-release 之前把 OutlinePane / SpikeCanvas 内的「读取 node content」改成 `subscribeNode` 风格的 slice hook，
+  App 只订阅 `rootId` 和 `revision`。
+
+ESLint 阻断 `src/core/` 外引入 zustand 的规则仍然有效；`useSyncExternalStore` 走的是 `CoreStore.subscribe` 公开接口，
+没有泄漏 zustand store 本身。
 
 ## 9. 持久化边界
 

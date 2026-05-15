@@ -32,12 +32,16 @@
 
 ```ts
 export type { Doc, Node, FreeEdge, NodeId, EdgeId };
-export type { DocOperation, OpOrigin, ApplyResult, ValidationResult };
+export type { DocOperation, OpOrigin, ApplyResult, ApplyOptions, ValidationResult };
 export { createEmptyDoc, validateDoc, repairDoc };
 export { applyDocOp, applyDocTransaction, invertDocOperation };
 export { selectNode, selectChildIds, selectSubtree, selectPath };
+export { createTextDoc, getPlainText, isRichText, richTextSignature };
 export { createCoreStore };
 ```
+
+`richTextSignature(content)` 产出 key 顺序稳定的字符串签名，供编辑器桥用来判断「这是不是我自己刚发的更新」。
+不要把它当持久化字段写进 doc——它只是回灌防抖的临时键。
 
 不允许跨模块 import：
 
@@ -108,13 +112,15 @@ interface ApplyContext {
 function applyDocOp(
   doc: Doc,
   op: DocOperation,
-  context: ApplyContext
+  context: ApplyContext,
+  options?: ApplyOptions
 ): ApplyResult;
 
 function applyDocTransaction(
   doc: Doc,
   ops: DocOperation[],
-  context: ApplyContext
+  context: ApplyContext,
+  options?: ApplyOptions
 ): ApplyResult;
 
 interface ApplyResult {
@@ -124,6 +130,15 @@ interface ApplyResult {
   validation?: ValidationResult;
   error?: CoreError;
 }
+
+interface ApplyOptions {
+  /**
+   * 跳过入口处对 doc 的 validateDoc。仅当调用方能保证 doc 已经被校验过
+   * （例如来自 store 自己上一次 apply 的输出）时才传 true。
+   * 出口处的 validateDoc 始终会跑，永远会捕获非法的最终状态。
+   */
+  skipInputValidation?: boolean;
+}
 ```
 
 规则：
@@ -132,6 +147,10 @@ interface ApplyResult {
 - transaction 必须原子化：任一 op 失败，整个 transaction 不生效。
 - apply 失败必须返回错误，不允许半成功。
 - import / load 可以 repair；普通用户操作不能静默 repair。
+- 默认会在入口对 `doc` 跑一次 `validateDoc` 作为防御性检查；`skipInputValidation` 只是性能旋钮，
+  不改变正确性保证——出口的 validate 仍然兜底。
+- `CoreStore` 内部所有调用都会传 `skipInputValidation: true`，因为它在构造时已 validate `initialDoc`，
+  之后只接收自己上一次 apply 的输出。
 
 ## 6. Validation
 
@@ -149,7 +168,16 @@ interface ApplyResult {
 - `side` 只允许 root 的直接子节点使用。
 - ProseMirror JSON 满足当前 schema。
 
-`repairDoc(doc)` 只用于 import / load，并且必须返回 repair report。
+实现细节（v0.1-spike）：
+
+- 可达性 + 环检测合并成一次 O(N) 染色 DFS；环节点报 `CYCLE_DETECTED`，不会再叠加一条 unreachable。
+- 一个节点最多只属于「reachable / unreachable / cycle」中的一类。
+
+`repairDoc(doc)` 只用于 import / load，并且必须返回 repair report。两轮修复：
+
+1. **Pass 1**：丢掉 `childIds` 里指向不存在节点、parentId 不一致或重复的项。
+2. **Pass 2**：把 `parentId` 指向但 parent.childIds 漏列的孤儿按 id 排序 append 到 parent.childIds，
+   兑现 [ADR-0002](../adr/0002-document-model-flat.md) 「parentId ↔ childIds 一致性自动修复」承诺。
 
 ## 7. Selectors
 
@@ -177,6 +205,8 @@ selectEdgesForNode(doc, nodeId)
 
 ```ts
 interface CoreStore {
+  getDoc(): Doc;
+  subscribe(fn: () => void): Unsubscribe;
   applyDocOp(op: DocOperation, origin: OpOrigin): ApplyResult;
   applyDocTransaction(ops: DocOperation[], origin: OpOrigin): ApplyResult;
   undo(scope?: 'local' | 'global'): ApplyResult;
@@ -186,7 +216,17 @@ interface CoreStore {
 }
 ```
 
-`subscribeDoc` 如果存在，只允许 debug、import/export、devtools 使用。普通 UI 不应该订阅整份 doc。
+合约：
+
+- `subscribe(fn)` 在 `doc` 引用变化时触发回调；**不在订阅时立即 fire**，与 `subscribeNode` / `subscribeChildIds` 的 fire-on-subscribe 行为不同。
+  设计目的是直接喂给 React 的 `useSyncExternalStore(subscribe, getDoc)`，所以快照通过 `getDoc()` 同步获取。
+- `subscribeNode(id, fn)` / `subscribeChildIds(id, fn)` 在订阅时同步触发一次（初始快照），之后只在对应切片引用变化时触发。
+- `createCoreStore(initialDoc)` 构造时会跑一次 `validateDoc(initialDoc)`，失败抛错；后续 `applyDoc*` 调用都走 `skipInputValidation: true`。
+- 失败的 op 不会推进 `revision`，也不会触发 `subscribe` 回调（doc 引用未变）。
+
+注意：v0.1-spike 阶段允许「App 通过 `useSyncExternalStore(subscribe, getDoc)` 订阅整份 doc」作为 dual-source-of-truth 的替代方案，
+但这并不是终态——v0.1-release 之前应该把 OutlinePane / SpikeCanvas 的子组件改成 `subscribeNode` 风格的 slice 订阅。详见
+[STATE_MODEL §8](./STATE_MODEL.zh-CN.md#8-store-公开访问)。
 
 ## 9. Error Model
 
