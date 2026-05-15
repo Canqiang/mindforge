@@ -56,9 +56,9 @@ async function runFixture(page, fixture) {
     mountMs: Number(element.getAttribute('data-mount-ms'))
   }));
 
-  const canvasNodeCount = await page.locator('.spike-node').count();
-  const scriptedPanFrames = await measureScriptedPan(page);
   const editLatencyMs = await measureEditLatency(page);
+  const scriptedPanFrames = await measureScriptedPan(page);
+  const canvasStats = await readCanvasStats(page);
   const editorCount = await page.locator('.ProseMirror').count();
 
   return {
@@ -66,13 +66,28 @@ async function runFixture(page, fixture) {
     totalMs: round(performance.now() - startedAt),
     nodeCount: attributes.nodeCount,
     editorCount,
-    canvasNodeCount,
+    canvasNodeCount: canvasStats.nodeCount,
+    canvasEdgeCount: canvasStats.edgeCount,
     layoutMs: round(attributes.layoutMs),
     mountMs: round(attributes.mountMs),
     editLatencyMs: round(editLatencyMs),
     panFrameMedianMs: round(percentile(scriptedPanFrames, 0.5)),
     panFrameP95Ms: round(percentile(scriptedPanFrames, 0.95)),
     panFrameMaxMs: round(Math.max(...scriptedPanFrames))
+  };
+}
+
+async function readCanvasStats(page) {
+  const canvasStats = await page.locator('.spike-canvas').evaluate((element) => ({
+    nodeCount: element.getAttribute('data-visible-node-count'),
+    edgeCount: element.getAttribute('data-visible-edge-count')
+  }));
+  const nodeCount = Number(canvasStats.nodeCount ?? Number.NaN);
+  const edgeCount = Number(canvasStats.edgeCount ?? Number.NaN);
+
+  return {
+    nodeCount: Number.isFinite(nodeCount) ? nodeCount : await page.locator('.spike-node').count(),
+    edgeCount: Number.isFinite(edgeCount) ? edgeCount : await page.locator('.spike-edges path').count()
   };
 }
 
@@ -193,13 +208,13 @@ function formatMarkdown(rows) {
     `- Memory: ${Math.round(totalmem() / 1024 / 1024 / 1024)} GB`,
     `- Fixtures: ${rows.map((row) => row.fixture).join(', ')}`,
     '',
-    '| fixture | nodes | editors | mount ms | layout ms | edit sync ms | pan median ms | pan p95 ms | pan max ms | total ms |',
-    '|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|'
+    '| fixture | nodes | canvas nodes | canvas edges | editors | mount ms | layout ms | edit sync ms | pan median ms | pan p95 ms | pan max ms | total ms |',
+    '|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|'
   ];
 
   for (const row of rows) {
     lines.push(
-      `| ${row.fixture} | ${row.nodeCount} | ${row.editorCount} | ${row.mountMs} | ${row.layoutMs} | ${row.editLatencyMs} | ${row.panFrameMedianMs} | ${row.panFrameP95Ms} | ${row.panFrameMaxMs} | ${row.totalMs} |`
+      `| ${row.fixture} | ${row.nodeCount} | ${row.canvasNodeCount} | ${row.canvasEdgeCount} | ${row.editorCount} | ${row.mountMs} | ${row.layoutMs} | ${row.editLatencyMs} | ${row.panFrameMedianMs} | ${row.panFrameP95Ms} | ${row.panFrameMaxMs} | ${row.totalMs} |`
     );
   }
 
@@ -213,6 +228,7 @@ function formatMarkdown(rows) {
     '',
     '- `edit sync ms` measures outline edit -> matching canvas text visible.',
     '- `editors` counts mounted ProseMirror editors after the edit-sync measurement.',
+    '- `canvas nodes` / `canvas edges` count the current rendered canvas DOM after scripted pan.',
     '- `pan * ms` is scripted wheel-pan frame interval sampling inside the browser.'
   );
 
@@ -225,7 +241,7 @@ function classifyRows(rows) {
     (row) => row.mountMs > 2000 || row.panFrameP95Ms > 25 || row.editLatencyMs > 100
   );
   if (noGoRows.length > 0) {
-    return 'No-go for the currently measured render path. The next spike step should reduce visible DOM work with viewport culling and then rerun the same benchmark.';
+    return 'No-go for the currently measured render path. The next spike step should reduce React update breadth and outline-side DOM work, then rerun the same benchmark.';
   }
 
   const conditionalRows = rows.filter(

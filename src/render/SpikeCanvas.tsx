@@ -1,8 +1,8 @@
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { getPlainText, type Doc, type NodeId, type RichText } from '../core';
 import { NodeEditorSlot } from '../editor/NodeEditorSlot';
 import type { EditorSurface, TextSelectionMirror } from '../editor/selection';
-import type { LayoutResult } from '../layout';
+import type { LayoutNode, LayoutResult } from '../layout';
 
 interface SpikeCanvasProps {
   doc: Doc;
@@ -20,9 +20,27 @@ interface Viewport {
   scale: number;
 }
 
+interface CanvasSize {
+  width: number;
+  height: number;
+}
+
+interface CullRect {
+  left: number;
+  top: number;
+  right: number;
+  bottom: number;
+}
+
+const DEFAULT_CANVAS_SIZE: CanvasSize = { width: 1440, height: 900 };
+const VIEWPORT_OVERSCAN = 360;
+
 export function SpikeCanvas({ doc, layout, activeNodeId, mirroredSelection, onActivateEditor, onContentChange, onSelectionChange }: SpikeCanvasProps) {
   const [viewport, setViewport] = useState<Viewport>({ x: 0, y: 0, scale: 1 });
+  const [canvasSize, setCanvasSize] = useState<CanvasSize>(DEFAULT_CANVAS_SIZE);
+  const canvasRef = useRef<HTMLDivElement | null>(null);
   const panRef = useRef<{ pointerId: number; x: number; y: number; viewport: Viewport } | null>(null);
+  const mirroredNodeId = mirroredSelection?.nodeId ?? null;
   const world = useMemo(
     () => ({
       width: Math.max(1400, layout.bounds.maxX + 560),
@@ -30,11 +48,61 @@ export function SpikeCanvas({ doc, layout, activeNodeId, mirroredSelection, onAc
     }),
     [layout.bounds.maxX, layout.bounds.maxY]
   );
+  const visible = useMemo(() => {
+    const cullRect = getCullRect(viewport, canvasSize);
+    const forcedNodeIds = new Set<NodeId>([doc.rootId]);
+    if (activeNodeId) {
+      forcedNodeIds.add(activeNodeId);
+    }
+    if (mirroredNodeId) {
+      forcedNodeIds.add(mirroredNodeId);
+    }
+
+    const nodes = Object.values(layout.nodes).filter(
+      (node) => forcedNodeIds.has(node.id) || rectIntersectsNode(cullRect, node)
+    );
+    const nodeIds = new Set(nodes.map((node) => node.id));
+    const edges = layout.edges.filter((edge) => nodeIds.has(edge.from) && nodeIds.has(edge.to));
+
+    return { nodes, edges };
+  }, [activeNodeId, canvasSize, doc.rootId, layout.edges, layout.nodes, mirroredNodeId, viewport]);
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) {
+      return;
+    }
+
+    const updateSize = (entry: ResizeObserverEntry) => {
+      const { width, height } = entry.contentRect;
+      setCanvasSize((current) => {
+        const next = { width: Math.round(width), height: Math.round(height) };
+        return current.width === next.width && current.height === next.height ? current : next;
+      });
+    };
+
+    const observer = new ResizeObserver((entries) => {
+      const entry = entries[0];
+      if (entry) {
+        updateSize(entry);
+      }
+    });
+
+    observer.observe(canvas);
+    return () => {
+      observer.disconnect();
+    };
+  }, []);
 
   return (
     <div
+      ref={canvasRef}
       className="spike-canvas"
       aria-label="Mind map spike canvas"
+      data-total-node-count={Object.keys(layout.nodes).length}
+      data-visible-node-count={visible.nodes.length}
+      data-visible-edge-count={visible.edges.length}
+      data-culling-enabled="true"
       onPointerDown={(event) => {
         if ((event.target as HTMLElement).closest('.spike-node')) {
           return;
@@ -101,7 +169,7 @@ export function SpikeCanvas({ doc, layout, activeNodeId, mirroredSelection, onAc
         }}
       >
         <svg className="spike-edges" width={world.width} height={world.height} aria-hidden="true">
-          {layout.edges.map((edge) => (
+          {visible.edges.map((edge) => (
             <path
               key={`${edge.from}:${edge.to}`}
               d={`M ${edge.x1} ${edge.y1} C ${(edge.x1 + edge.x2) / 2} ${edge.y1}, ${(edge.x1 + edge.x2) / 2} ${edge.y2}, ${edge.x2} ${edge.y2}`}
@@ -111,7 +179,7 @@ export function SpikeCanvas({ doc, layout, activeNodeId, mirroredSelection, onAc
             />
           ))}
         </svg>
-        {Object.values(layout.nodes).map((layoutNode) => {
+        {visible.nodes.map((layoutNode) => {
           const node = doc.nodes[layoutNode.id];
           const title = node ? getPlainText(node.content) : layoutNode.id;
           return (
@@ -146,4 +214,18 @@ export function SpikeCanvas({ doc, layout, activeNodeId, mirroredSelection, onAc
       </div>
     </div>
   );
+}
+
+function getCullRect(viewport: Viewport, canvasSize: CanvasSize): CullRect {
+  const overscan = VIEWPORT_OVERSCAN / viewport.scale;
+  return {
+    left: -viewport.x / viewport.scale - overscan,
+    top: -viewport.y / viewport.scale - overscan,
+    right: (canvasSize.width - viewport.x) / viewport.scale + overscan,
+    bottom: (canvasSize.height - viewport.y) / viewport.scale + overscan
+  };
+}
+
+function rectIntersectsNode(rect: CullRect, node: LayoutNode): boolean {
+  return node.x <= rect.right && node.x + node.width >= rect.left && node.y <= rect.bottom && node.y + node.height >= rect.top;
 }

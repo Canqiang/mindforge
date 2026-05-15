@@ -26,6 +26,21 @@ test('canvas selection mirrors to the outline editor for the same node', async (
   await expect(editor(page, 'outline', 'node-3')).toBeVisible();
 });
 
+test('benchmark canvas culls offscreen nodes without breaking edit mirror', async ({ page }) => {
+  await page.goto('/?fixture=balanced-1000');
+  await page.waitForFunction(() => document.querySelector('.app-shell')?.getAttribute('data-benchmark-ready') === 'true');
+
+  const canvas = page.locator('.spike-canvas');
+  const totalNodes = Number(await canvas.getAttribute('data-total-node-count'));
+  const visibleNodes = Number(await canvas.getAttribute('data-visible-node-count'));
+  expect(totalNodes).toBe(1000);
+  expect(visibleNodes).toBeGreaterThan(0);
+  expect(visibleNodes).toBeLessThan(totalNodes);
+
+  await (await activateEditor(page, 'outline', 'node-1')).fill('Culling keeps mirror editable');
+  await expect(slot(page, 'canvas', 'node-1')).toContainText('Culling keeps mirror editable');
+});
+
 async function activateEditor(page: Page, surface: 'outline' | 'canvas', nodeId: string) {
   await slot(page, surface, nodeId).click();
   const activeEditor = editor(page, surface, nodeId);
