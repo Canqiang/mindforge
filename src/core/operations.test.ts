@@ -436,6 +436,32 @@ describe('core doc operations', () => {
     expect(validateDoc(result.doc!).ok).toBe(true);
   });
 
+  it('canUndo / canRedo reflect the history stacks across apply, undo, redo', () => {
+    const doc = withNode(createEmptyDoc({ title: 'Root', now: 0 }), 'a', 'A', 'root');
+    const store = createCoreStore(doc);
+
+    expect(store.canUndo()).toBe(false);
+    expect(store.canRedo()).toBe(false);
+
+    store.applyDocOp({ id: 'theme-mono', type: 'setTheme', theme: 'mono' }, 'test');
+    expect(store.canUndo()).toBe(true);
+    expect(store.canRedo()).toBe(false);
+
+    store.undo();
+    expect(store.canUndo()).toBe(false);
+    expect(store.canRedo()).toBe(true);
+
+    store.redo();
+    expect(store.canUndo()).toBe(true);
+    expect(store.canRedo()).toBe(false);
+
+    // A fresh apply clears the redo stack.
+    store.undo();
+    expect(store.canRedo()).toBe(true);
+    store.applyDocOp({ id: 'theme-mini', type: 'setTheme', theme: 'minimal' }, 'test');
+    expect(store.canRedo()).toBe(false);
+  });
+
   it('repairDoc cannot fix a missing rootId and surfaces the issue', () => {
     const doc: Doc = {
       version: 1,

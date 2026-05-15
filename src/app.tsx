@@ -81,6 +81,8 @@ export function App() {
   }, [runtime]);
 
   const theme = resolveTheme(doc.theme);
+  const canUndo = runtime.store.canUndo();
+  const canRedo = runtime.store.canRedo();
   useEffect(() => {
     if (typeof document === 'undefined') return;
     const previous = document.documentElement.dataset.theme;
@@ -207,6 +209,45 @@ export function App() {
     [applyOperation]
   );
 
+  const handleUndo = useCallback(() => {
+    const result = runtime.store.undo();
+    if (!result.ok) {
+      setLastError(result.error ? `${result.error.code}: ${result.error.message}` : 'Undo failed');
+    }
+  }, [runtime.store]);
+
+  const handleRedo = useCallback(() => {
+    const result = runtime.store.redo();
+    if (!result.ok) {
+      setLastError(result.error ? `${result.error.code}: ${result.error.message}` : 'Redo failed');
+    }
+  }, [runtime.store]);
+
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      // Cmd (macOS) or Ctrl (others) only. Reject events where neither is set,
+      // and reject events with the other modifier as well (e.g. plain Z without
+      // any modifier should still type 'z' inside a focused editor).
+      const isPrimary = event.metaKey !== event.ctrlKey;
+      if (!isPrimary) return;
+      const key = event.key.toLowerCase();
+      if (key === 'z') {
+        event.preventDefault();
+        if (event.shiftKey) {
+          handleRedo();
+        } else {
+          handleUndo();
+        }
+      } else if (key === 'y' && !event.shiftKey) {
+        // Windows-style redo. macOS hotkey is Cmd-Shift-Z handled above.
+        event.preventDefault();
+        handleRedo();
+      }
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [handleUndo, handleRedo]);
+
   return (
     <main
       className="app-shell"
@@ -232,11 +273,15 @@ export function App() {
           activeNodeId={activeEditors.canvas}
           mirroredSelection={selectionMirror}
           theme={theme}
+          canUndo={canUndo}
+          canRedo={canRedo}
           onActivateEditor={handleActivateEditor}
           onContentChange={handleContentChange}
           onSelectionChange={handleSelectionChange}
           onToggleCollapsed={handleToggleCollapsed}
           onSelectTheme={handleSelectTheme}
+          onUndo={handleUndo}
+          onRedo={handleRedo}
           onViewportMeasured={handleCanvasViewportMeasured}
         />
       </section>

@@ -1,6 +1,15 @@
 import { expect, test, type Page } from '@playwright/test';
 
 test.beforeEach(async ({ page }) => {
+  // Persistence keys carry over across navigations in the same browser
+  // context; flush them so each test starts from a clean spike seed.
+  await page.addInitScript(() => {
+    try {
+      window.localStorage.removeItem('mindforge:doc:v1');
+    } catch {
+      // ignore
+    }
+  });
   await page.goto('/');
   await expect(page.locator('.spike-canvas')).toBeVisible();
 });
@@ -42,6 +51,42 @@ test('benchmark canvas culls offscreen nodes without breaking edit mirror', asyn
 
   await (await activateEditor(page, 'outline', 'node-1')).fill('Culling keeps mirror editable');
   await expect(slot(page, 'canvas', 'node-1')).toContainText('Culling keeps mirror editable');
+});
+
+test('cmd/ctrl-z undoes a theme switch and cmd-shift-z redoes it', async ({ page }) => {
+  const html = page.locator('html');
+  await expect(html).toHaveAttribute('data-theme', 'default');
+
+  await page.getByLabel('Theme').selectOption('mono');
+  await expect(html).toHaveAttribute('data-theme', 'mono');
+
+  // Cross-platform: macOS uses Meta, others use Control. Playwright's
+  // ControlOrMeta picks the right one per OS.
+  await page.keyboard.press('ControlOrMeta+z');
+  await expect(html).toHaveAttribute('data-theme', 'default');
+
+  await page.keyboard.press('ControlOrMeta+Shift+z');
+  await expect(html).toHaveAttribute('data-theme', 'mono');
+});
+
+test('undo toolbar buttons enable / disable with the history stack', async ({ page }) => {
+  const undoBtn = page.getByRole('button', { name: 'Undo' });
+  const redoBtn = page.getByRole('button', { name: 'Redo' });
+
+  await expect(undoBtn).toBeDisabled();
+  await expect(redoBtn).toBeDisabled();
+
+  await page.getByLabel('Theme').selectOption('mono');
+  await expect(undoBtn).toBeEnabled();
+  await expect(redoBtn).toBeDisabled();
+
+  await undoBtn.click();
+  await expect(undoBtn).toBeDisabled();
+  await expect(redoBtn).toBeEnabled();
+
+  await redoBtn.click();
+  await expect(undoBtn).toBeEnabled();
+  await expect(redoBtn).toBeDisabled();
 });
 
 test('theme selector switches CSS variables across the document', async ({ page }) => {

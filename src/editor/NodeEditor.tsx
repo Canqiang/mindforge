@@ -13,7 +13,12 @@ const nodeEditorExtensions = [
     heading: false,
     horizontalRule: false,
     listItem: false,
-    orderedList: false
+    orderedList: false,
+    // Disable Tiptap v3's per-editor undo (the option is named `undoRedo`
+    // in StarterKit v3; older docs may call it `history`). Every
+    // updateContent op flows through the CoreStore history stack, and a
+    // competing Tiptap undo would put the doc and the editor out of sync.
+    undoRedo: false
   })
 ];
 

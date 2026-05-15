@@ -11,11 +11,15 @@ interface SpikeCanvasProps {
   activeNodeId: NodeId | null;
   mirroredSelection: TextSelectionMirror | null;
   theme: string;
+  canUndo: boolean;
+  canRedo: boolean;
   onActivateEditor: (surface: EditorSurface, nodeId: NodeId) => void;
   onContentChange: (nodeId: NodeId, content: RichText, surface: EditorSurface) => void;
   onSelectionChange: (selection: TextSelectionMirror) => void;
   onToggleCollapsed: (nodeId: NodeId, next: boolean) => void;
   onSelectTheme: (themeId: string) => void;
+  onUndo: () => void;
+  onRedo: () => void;
   onViewportMeasured: () => void;
 }
 
@@ -46,11 +50,15 @@ export function SpikeCanvas({
   activeNodeId,
   mirroredSelection,
   theme,
+  canUndo,
+  canRedo,
   onActivateEditor,
   onContentChange,
   onSelectionChange,
   onToggleCollapsed,
   onSelectTheme,
+  onUndo,
+  onRedo,
   onViewportMeasured
 }: SpikeCanvasProps) {
   const [viewport, setViewport] = useState<Viewport>({ x: 0, y: 0, scale: 1 });
@@ -193,7 +201,11 @@ export function SpikeCanvas({
       data-culling-enabled="true"
       data-viewport-measured={viewportMeasured}
       onPointerDown={(event) => {
-        if ((event.target as HTMLElement).closest('.spike-node')) {
+        const target = event.target as HTMLElement;
+        // Don't start a pan when the user is interacting with a node or
+        // the floating toolbar — capturing the pointer there would eat the
+        // button's click event and leave the chevron / undo unresponsive.
+        if (target.closest('.spike-node') || target.closest('.canvas-toolbar')) {
           return;
         }
         panRef.current = {
@@ -222,6 +234,27 @@ export function SpikeCanvas({
       }}
     >
       <div className="canvas-toolbar" aria-label="Canvas controls">
+        <button
+          type="button"
+          className="canvas-toolbar-history"
+          aria-label="Undo"
+          title="Undo (Cmd/Ctrl-Z)"
+          disabled={!canUndo}
+          onClick={onUndo}
+        >
+          ↶
+        </button>
+        <button
+          type="button"
+          className="canvas-toolbar-history"
+          aria-label="Redo"
+          title="Redo (Cmd-Shift-Z / Ctrl-Y)"
+          disabled={!canRedo}
+          onClick={onRedo}
+        >
+          ↷
+        </button>
+        <span className="canvas-toolbar-divider" aria-hidden="true" />
         <button type="button" onClick={() => setViewport((current) => ({ ...current, scale: Math.max(0.45, current.scale - 0.1) }))}>
           -
         </button>

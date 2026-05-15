@@ -383,6 +383,21 @@ textarea {
   outline: none;
 }
 
+.canvas-toolbar-history {
+  font-size: 16px;
+  line-height: 1;
+}
+
+.canvas-toolbar-history[disabled] {
+  color: color-mix(in srgb, var(--mf-muted), transparent 40%);
+  cursor: default;
+}
+
+.canvas-toolbar-history[disabled]:hover {
+  background: transparent;
+  border-color: transparent;
+}
+
 .operation-error {
   position: fixed;
   right: 18px;

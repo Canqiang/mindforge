@@ -28,6 +28,13 @@ export interface CoreStore {
    * style consumption — does NOT fire on subscribe.
    */
   subscribe(fn: () => void): Unsubscribe;
+  /**
+   * Synchronous read of whether an entry is available on the undo / redo
+   * stack. Both flip together with `doc` identity on every successful apply,
+   * so a consumer subscribed via `subscribe` can recompute them inline.
+   */
+  canUndo(): boolean;
+  canRedo(): boolean;
   applyDocOp(op: DocOperation, origin: OpOrigin): ApplyResult;
   applyDocTransaction(ops: DocOperation[], origin: OpOrigin): ApplyResult;
   undo(scope?: 'local' | 'global'): ApplyResult;
@@ -97,6 +104,12 @@ export function createCoreStore(initialDoc: Doc): CoreStore {
           fn();
         }
       });
+    },
+    canUndo() {
+      return store.getState().undoStack.length > 0;
+    },
+    canRedo() {
+      return store.getState().redoStack.length > 0;
     },
     applyDocOp(op, origin) {
       return applyTransaction([op], origin, true);
