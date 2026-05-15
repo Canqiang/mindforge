@@ -12,6 +12,7 @@ interface SpikeCanvasProps {
   onActivateEditor: (surface: EditorSurface, nodeId: NodeId) => void;
   onContentChange: (nodeId: NodeId, content: RichText, surface: EditorSurface) => void;
   onSelectionChange: (selection: TextSelectionMirror) => void;
+  onViewportMeasured: () => void;
 }
 
 interface Viewport {
@@ -35,9 +36,19 @@ interface CullRect {
 const DEFAULT_CANVAS_SIZE: CanvasSize = { width: 1440, height: 900 };
 const VIEWPORT_OVERSCAN = 360;
 
-export function SpikeCanvas({ doc, layout, activeNodeId, mirroredSelection, onActivateEditor, onContentChange, onSelectionChange }: SpikeCanvasProps) {
+export function SpikeCanvas({
+  doc,
+  layout,
+  activeNodeId,
+  mirroredSelection,
+  onActivateEditor,
+  onContentChange,
+  onSelectionChange,
+  onViewportMeasured
+}: SpikeCanvasProps) {
   const [viewport, setViewport] = useState<Viewport>({ x: 0, y: 0, scale: 1 });
   const [canvasSize, setCanvasSize] = useState<CanvasSize>(DEFAULT_CANVAS_SIZE);
+  const [viewportMeasured, setViewportMeasured] = useState(false);
   const canvasRef = useRef<HTMLDivElement | null>(null);
   const panRef = useRef<{ pointerId: number; x: number; y: number; viewport: Viewport } | null>(null);
   const mirroredNodeId = mirroredSelection?.nodeId ?? null;
@@ -62,7 +73,7 @@ export function SpikeCanvas({ doc, layout, activeNodeId, mirroredSelection, onAc
       (node) => forcedNodeIds.has(node.id) || rectIntersectsNode(cullRect, node)
     );
     const nodeIds = new Set(nodes.map((node) => node.id));
-    const edges = layout.edges.filter((edge) => nodeIds.has(edge.from) && nodeIds.has(edge.to));
+    const edges = layout.edges.filter((edge) => nodeIds.has(edge.to));
 
     return { nodes, edges };
   }, [activeNodeId, canvasSize, doc.rootId, layout.edges, layout.nodes, mirroredNodeId, viewport]);
@@ -75,6 +86,8 @@ export function SpikeCanvas({ doc, layout, activeNodeId, mirroredSelection, onAc
 
     const updateSize = (entry: ResizeObserverEntry) => {
       const { width, height } = entry.contentRect;
+      setViewportMeasured(true);
+      onViewportMeasured();
       setCanvasSize((current) => {
         const next = { width: Math.round(width), height: Math.round(height) };
         return current.width === next.width && current.height === next.height ? current : next;
@@ -92,7 +105,7 @@ export function SpikeCanvas({ doc, layout, activeNodeId, mirroredSelection, onAc
     return () => {
       observer.disconnect();
     };
-  }, []);
+  }, [onViewportMeasured]);
 
   return (
     <div
@@ -103,6 +116,7 @@ export function SpikeCanvas({ doc, layout, activeNodeId, mirroredSelection, onAc
       data-visible-node-count={visible.nodes.length}
       data-visible-edge-count={visible.edges.length}
       data-culling-enabled="true"
+      data-viewport-measured={viewportMeasured}
       onPointerDown={(event) => {
         if ((event.target as HTMLElement).closest('.spike-node')) {
           return;

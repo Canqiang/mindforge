@@ -23,6 +23,7 @@ export function App() {
   const [activeEditors, setActiveEditors] = useState<ActiveEditors>({ outline: null, canvas: null });
   const [lastError, setLastError] = useState<string | null>(null);
   const [benchmarkReady, setBenchmarkReady] = useState(false);
+  const [canvasViewportMeasured, setCanvasViewportMeasured] = useState(false);
   const [mountMs, setMountMs] = useState(0);
   const [layoutMs, setLayoutMs] = useState(0);
 
@@ -138,6 +139,10 @@ export function App() {
     );
   }, []);
 
+  const handleCanvasViewportMeasured = useCallback(() => {
+    setCanvasViewportMeasured(true);
+  }, []);
+
   return (
     <main
       className="app-shell"
@@ -145,7 +150,7 @@ export function App() {
       data-node-count={Object.keys(doc.nodes).length}
       data-layout-ms={layoutMs.toFixed(2)}
       data-mount-ms={mountMs.toFixed(2)}
-      data-benchmark-ready={benchmarkReady}
+      data-benchmark-ready={benchmarkReady && canvasViewportMeasured}
     >
       <OutlinePane
         doc={doc}
@@ -164,6 +169,7 @@ export function App() {
           onActivateEditor={handleActivateEditor}
           onContentChange={handleContentChange}
           onSelectionChange={handleSelectionChange}
+          onViewportMeasured={handleCanvasViewportMeasured}
         />
       </section>
       {lastError ? (

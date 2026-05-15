@@ -1,7 +1,7 @@
-import { getPlainText, type Doc, type NodeId, type RichText } from '../core';
+import { memo, useMemo, type CSSProperties } from 'react';
+import { getPlainText, type Doc, type MindNode, type NodeId, type RichText } from '../core';
 import { NodeEditorSlot } from '../editor/NodeEditorSlot';
 import { formatSelectionMirror, type EditorSurface, type TextSelectionMirror } from '../editor/selection';
-import type { CSSProperties } from 'react';
 
 interface OutlinePaneProps {
   doc: Doc;
@@ -12,20 +12,35 @@ interface OutlinePaneProps {
   onSelectionChange: (selection: TextSelectionMirror) => void;
 }
 
+interface OutlineRow {
+  nodeId: NodeId;
+  depth: number;
+}
+
 export function OutlinePane({ doc, activeNodeId, mirroredSelection, onActivateEditor, onContentChange, onSelectionChange }: OutlinePaneProps) {
+  const rows = useMemo(() => flattenOutlineRows(doc), [doc]);
+
   return (
     <aside className="outline-pane">
       <div className="pane-label">Spike outline bridge</div>
-      <OutlineNode
-        doc={doc}
-        activeNodeId={activeNodeId}
-        nodeId={doc.rootId}
-        depth={0}
-        mirroredSelection={mirroredSelection}
-        onActivateEditor={onActivateEditor}
-        onContentChange={onContentChange}
-        onSelectionChange={onSelectionChange}
-      />
+      {rows.map((row) => {
+        const node = doc.nodes[row.nodeId];
+        if (!node) {
+          return null;
+        }
+        return (
+          <OutlineNodeRow
+            key={row.nodeId}
+            node={node}
+            depth={row.depth}
+            active={activeNodeId === row.nodeId}
+            mirroredSelection={mirroredSelection?.nodeId === row.nodeId ? mirroredSelection : null}
+            onActivateEditor={onActivateEditor}
+            onContentChange={onContentChange}
+            onSelectionChange={onSelectionChange}
+          />
+        );
+      })}
       <div className="bridge-status" aria-live="polite">
         {formatSelectionMirror(mirroredSelection)}
       </div>
@@ -33,17 +48,25 @@ export function OutlinePane({ doc, activeNodeId, mirroredSelection, onActivateEd
   );
 }
 
-interface OutlineNodeProps extends OutlinePaneProps {
-  nodeId: NodeId;
+interface OutlineNodeRowProps {
+  node: MindNode;
   depth: number;
+  active: boolean;
+  mirroredSelection: TextSelectionMirror | null;
+  onActivateEditor: (surface: EditorSurface, nodeId: NodeId) => void;
+  onContentChange: (nodeId: NodeId, content: RichText, surface: EditorSurface) => void;
+  onSelectionChange: (selection: TextSelectionMirror) => void;
 }
 
-function OutlineNode({ doc, activeNodeId, nodeId, depth, mirroredSelection, onActivateEditor, onContentChange, onSelectionChange }: OutlineNodeProps) {
-  const node = doc.nodes[nodeId];
-  if (!node) {
-    return null;
-  }
-
+const OutlineNodeRow = memo(function OutlineNodeRow({
+  node,
+  depth,
+  active,
+  mirroredSelection,
+  onActivateEditor,
+  onContentChange,
+  onSelectionChange
+}: OutlineNodeRowProps) {
   const title = getPlainText(node.content) || 'Untitled';
 
   return (
@@ -51,10 +74,10 @@ function OutlineNode({ doc, activeNodeId, nodeId, depth, mirroredSelection, onAc
       <div className="outline-node-row">
         <span className="outline-bullet" aria-hidden="true" />
         <NodeEditorSlot
-          nodeId={nodeId}
+          nodeId={node.id}
           content={node.content}
           surface="outline"
-          active={activeNodeId === nodeId}
+          active={active}
           mirroredSelection={mirroredSelection}
           ariaLabel={`Outline editor for ${title}`}
           onActivate={onActivateEditor}
@@ -62,23 +85,25 @@ function OutlineNode({ doc, activeNodeId, nodeId, depth, mirroredSelection, onAc
           onSelectionChange={onSelectionChange}
         />
       </div>
-      {node.childIds.length > 0 ? (
-        <div className="outline-children">
-          {node.childIds.map((childId) => (
-            <OutlineNode
-              key={childId}
-              doc={doc}
-              activeNodeId={activeNodeId}
-              nodeId={childId}
-              depth={depth + 1}
-              mirroredSelection={mirroredSelection}
-              onActivateEditor={onActivateEditor}
-              onContentChange={onContentChange}
-              onSelectionChange={onSelectionChange}
-            />
-          ))}
-        </div>
-      ) : null}
     </div>
   );
+});
+
+function flattenOutlineRows(doc: Doc): OutlineRow[] {
+  const rows: OutlineRow[] = [];
+  const visit = (nodeId: NodeId, depth: number) => {
+    const node = doc.nodes[nodeId];
+    if (!node) {
+      return;
+    }
+
+    rows.push({ nodeId, depth });
+    if (node.collapsed) {
+      return;
+    }
+    node.childIds.forEach((childId) => visit(childId, depth + 1));
+  };
+
+  visit(doc.rootId, 0);
+  return rows;
 }

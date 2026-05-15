@@ -33,9 +33,12 @@ test('benchmark canvas culls offscreen nodes without breaking edit mirror', asyn
   const canvas = page.locator('.spike-canvas');
   const totalNodes = Number(await canvas.getAttribute('data-total-node-count'));
   const visibleNodes = Number(await canvas.getAttribute('data-visible-node-count'));
+  const visibleEdges = Number(await canvas.getAttribute('data-visible-edge-count'));
+  await expect(canvas).toHaveAttribute('data-viewport-measured', 'true');
   expect(totalNodes).toBe(1000);
   expect(visibleNodes).toBeGreaterThan(0);
   expect(visibleNodes).toBeLessThan(totalNodes);
+  expect(visibleEdges).toBeGreaterThan(0);
 
   await (await activateEditor(page, 'outline', 'node-1')).fill('Culling keeps mirror editable');
   await expect(slot(page, 'canvas', 'node-1')).toContainText('Culling keeps mirror editable');
