@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { createOllamaProvider, expandNode, type AiProvider } from './ai';
 import { createCoreStore, createTextDoc, validateDoc, type CoreStore, type Doc, type DocOperation, type NodeId, type RichText } from './core';
 import { CoreStoreProvider, useCanRedo, useCanUndo, useStructureRevision } from './core-context';
 import type { StructuralKeyEvent } from './editor/NodeEditor';
@@ -46,9 +47,15 @@ interface AppShellProps {
   setRuntime: (runtime: AppRuntime) => void;
 }
 
+// One shared provider per process. Cheap to create; the underlying fetch
+// is what actually talks to Ollama on demand.
+const defaultAiProvider: AiProvider = createOllamaProvider();
+
 function AppShell({ runtime, setRuntime }: AppShellProps) {
   const opSeqRef = useRef(0);
   const mountStartRef = useRef(APP_BOOT_STARTED_AT);
+  const [aiPending, setAiPending] = useState(false);
+  const aiAbortRef = useRef<AbortController | null>(null);
   // Re-render when structural / non-content state moves. Content-only
   // keystrokes flow into the active NodeEditor via subscribeNode, so a
   // burst of typing inside one node never re-runs layout / outline flatten
@@ -335,6 +342,52 @@ function AppShell({ runtime, setRuntime }: AppShellProps) {
     [applyOperation, runtime.store]
   );
 
+  const handleExpand = useCallback(async () => {
+    const nodeId = activeEditors.outline ?? activeEditors.canvas;
+    if (!nodeId) {
+      setLastError('Click a node first so AI knows what to expand.');
+      return;
+    }
+    if (aiPending) return;
+
+    aiAbortRef.current?.abort();
+    const controller = new AbortController();
+    aiAbortRef.current = controller;
+    setAiPending(true);
+    setLastError(null);
+
+    try {
+      const currentDoc = runtime.store.getDoc();
+      const result = await expandNode(defaultAiProvider, {
+        doc: currentDoc,
+        nodeId,
+        signal: controller.signal
+      });
+      if (controller.signal.aborted) return;
+      if (!result.ok) {
+        setLastError(`${result.error.code}: ${result.error.message}`);
+        return;
+      }
+      opSeqRef.current += 1;
+      const applyResult = runtime.store.applyDocTransaction(result.ops, 'ai');
+      if (!applyResult.ok) {
+        setLastError(applyResult.error ? `${applyResult.error.code}: ${applyResult.error.message}` : 'Failed to apply AI ops');
+        return;
+      }
+    } finally {
+      if (aiAbortRef.current === controller) {
+        aiAbortRef.current = null;
+      }
+      setAiPending(false);
+    }
+  }, [activeEditors.outline, activeEditors.canvas, aiPending, runtime.store]);
+
+  useEffect(() => {
+    return () => {
+      aiAbortRef.current?.abort();
+    };
+  }, []);
+
   const handleUndo = useCallback(() => {
     const result = runtime.store.undo();
     if (!result.ok) {
@@ -436,6 +489,8 @@ function AppShell({ runtime, setRuntime }: AppShellProps) {
         doc={doc}
         activeNodeId={activeEditors.outline}
         mirroredSelection={selectionMirror}
+        aiPending={aiPending}
+        canExpand={Boolean(activeEditors.outline ?? activeEditors.canvas) && !aiPending}
         onActivateEditor={handleActivateEditor}
         onContentChange={handleContentChange}
         onSelectionChange={handleSelectionChange}
@@ -443,6 +498,7 @@ function AppShell({ runtime, setRuntime }: AppShellProps) {
         onStructuralKey={handleStructuralKey}
         onExport={handleExport}
         onImport={handleImport}
+        onExpand={handleExpand}
       />
       <section className="canvas-pane">
         <SpikeCanvas

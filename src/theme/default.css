@@ -111,6 +111,27 @@ textarea {
   outline: none;
 }
 
+.outline-pane-action[disabled] {
+  cursor: default;
+  color: color-mix(in srgb, var(--mf-muted), transparent 40%);
+}
+
+.outline-pane-action[disabled]:hover,
+.outline-pane-action[disabled]:focus-visible {
+  border-color: var(--mf-border);
+  color: color-mix(in srgb, var(--mf-muted), transparent 40%);
+}
+
+.outline-pane-action-ai {
+  border-color: color-mix(in srgb, var(--mf-accent), white 35%);
+  color: var(--mf-accent);
+}
+
+.outline-pane-action-ai:hover:not([disabled]),
+.outline-pane-action-ai:focus-visible:not([disabled]) {
+  background: var(--mf-accent-soft);
+}
+
 .outline-node {
   --outline-depth: 0;
   margin-top: 8px;
