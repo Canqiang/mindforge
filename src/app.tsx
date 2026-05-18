@@ -1,5 +1,6 @@
-import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createCoreStore, createTextDoc, validateDoc, type CoreStore, type Doc, type DocOperation, type NodeId, type RichText } from './core';
+import { CoreStoreProvider, useCanRedo, useCanUndo, useStructureRevision } from './core-context';
 import type { StructuralKeyEvent } from './editor/NodeEditor';
 import type { EditorSurface, TextSelectionMirror } from './editor/selection';
 import {
@@ -32,14 +33,30 @@ type ActiveEditors = Record<EditorSurface, NodeId | null>;
 
 export function App() {
   const [runtime, setRuntime] = useState<AppRuntime>(createInitialRuntime);
+
+  return (
+    <CoreStoreProvider store={runtime.store}>
+      <AppShell runtime={runtime} setRuntime={setRuntime} />
+    </CoreStoreProvider>
+  );
+}
+
+interface AppShellProps {
+  runtime: AppRuntime;
+  setRuntime: (runtime: AppRuntime) => void;
+}
+
+function AppShell({ runtime, setRuntime }: AppShellProps) {
   const opSeqRef = useRef(0);
   const mountStartRef = useRef(APP_BOOT_STARTED_AT);
-  const subscribeStore = useCallback(
-    (listener: () => void) => runtime.store.subscribe(listener),
-    [runtime.store]
-  );
-  const getDocSnapshot = useCallback(() => runtime.store.getDoc(), [runtime.store]);
-  const doc = useSyncExternalStore(subscribeStore, getDocSnapshot);
+  // Re-render when structural / non-content state moves. Content-only
+  // keystrokes flow into the active NodeEditor via subscribeNode, so a
+  // burst of typing inside one node never re-runs layout / outline flatten
+  // / canvas culling at the App level.
+  useStructureRevision();
+  const canUndo = useCanUndo();
+  const canRedo = useCanRedo();
+  const doc = runtime.store.getDoc();
   const [selectionMirror, setSelectionMirror] = useState<TextSelectionMirror | null>(null);
   const [activeEditors, setActiveEditors] = useState<ActiveEditors>({ outline: null, canvas: null });
   const [lastError, setLastError] = useState<string | null>(null);
@@ -88,8 +105,6 @@ export function App() {
   }, [runtime]);
 
   const theme = resolveTheme(doc.theme);
-  const canUndo = runtime.store.canUndo();
-  const canRedo = runtime.store.canRedo();
   useEffect(() => {
     if (typeof document === 'undefined') return;
     const previous = document.documentElement.dataset.theme;

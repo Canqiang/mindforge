@@ -193,19 +193,21 @@ useLayoutNode(nodeId)
 - 普通节点组件必须按 `NodeId` 订阅自己的 slice。
 - layout 可以读取必要的 doc 派生结构，但必须 memo。
 
-### v0.1-spike 例外条款
+### v0.1-spike 例外条款（已退出，2026-05-18）
 
-spike 阶段 App 通过 `useSyncExternalStore(store.subscribe, store.getDoc)` 订阅**整份 doc**，
-并把 doc 当 prop 传给 OutlinePane / SpikeCanvas。这是有意识接受的折衷：
+最初 v0.1-spike 阶段 App 通过 `useSyncExternalStore(store.subscribe, store.getDoc)` 订阅**整份 doc**，
+作为「dual source of truth」清零后的暂态。v0.1-release 引入了 slice 订阅，已经退出这个例外。
 
-- 好处：一次性消灭「`useState(doc)` + `setDoc(result.doc)`」的 dual source of truth；
-  store 是唯一事实源，为后续换 CRDT 留口子。
-- 代价：每次 op 都让 App 整棵重渲染。但是 (a) Outline 的子行有 memo，(b) Canvas 已经有 viewport culling，
-  spike benchmark 显示 1000 节点 fixture 仍然过线。
-- 退出条件：v0.1-release 之前把 OutlinePane / SpikeCanvas 内的「读取 node content」改成 `subscribeNode` 风格的 slice hook，
-  App 只订阅 `rootId` 和 `revision`。
+- **现在的形状**：App 用 `useStructureRevision()` 订阅 `CoreStore.subscribeStructure` —— 仅在
+  非 updateContent 的 op 上触发；layout / outline flatten / canvas culling 只在结构变更时重算。
+- **content 走 slice 订阅**：`NodeEditorSlot` 用 `useNode(nodeId)` 通过 `CoreStore.subscribeNode` 拿到自己节点的 content，
+  键入一字 → 只这一个 slot 重渲；App / OutlinePane / SpikeCanvas 都不动。
+- **canUndo / canRedo** 用 `useCanUndo()` / `useCanRedo()`，订阅 full store 但 useSyncExternalStore 的 boolean 比较保证
+  App 仅在 flip 时重渲，不会被 keystroke 高频触发。
+- **structureRevision 的口径**：除了 `updateContent`，其他 op（insertNode / deleteSubtree / moveNode / setCollapsed /
+  updateNodeMeta / setTheme / *FreeEdge / undo / redo）都会 bump。
 
-ESLint 阻断 `src/core/` 外引入 zustand 的规则仍然有效；`useSyncExternalStore` 走的是 `CoreStore.subscribe` 公开接口，
+ESLint 阻断 `src/core/` 外引入 zustand 的规则仍然有效；context + 三个 hook 都走 `CoreStore` 公开接口，
 没有泄漏 zustand store 本身。
 
 ## 9. 持久化边界

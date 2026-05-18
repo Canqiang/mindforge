@@ -462,6 +462,64 @@ describe('core doc operations', () => {
     expect(store.canRedo()).toBe(false);
   });
 
+  describe('structure revision', () => {
+    it('does not bump structureRevision on a pure updateContent op', () => {
+      const doc = withNode(createEmptyDoc({ title: 'Root', now: 0 }), 'a', 'A', 'root');
+      const store = createCoreStore(doc);
+      const before = store.getStructureRevision();
+
+      store.applyDocOp({ id: 'u', type: 'updateContent', nodeId: 'a', content: createTextDoc('AA') }, 'outline');
+      expect(store.getStructureRevision()).toBe(before);
+    });
+
+    it('bumps structureRevision on insert / move / delete / setCollapsed / setTheme', () => {
+      let doc = createEmptyDoc({ title: 'Root', now: 0 });
+      doc = withNode(doc, 'a', 'A', 'root');
+      const store = createCoreStore(doc);
+      const r0 = store.getStructureRevision();
+
+      store.applyDocOp(
+        {
+          id: 'ins-b',
+          type: 'insertNode',
+          parentId: 'root',
+          index: 1,
+          node: { id: 'b', content: createTextDoc('B'), side: 'left' }
+        },
+        'outline'
+      );
+      expect(store.getStructureRevision()).toBe(r0 + 1);
+
+      store.applyDocOp({ id: 'collapse', type: 'setCollapsed', nodeId: 'a', collapsed: true }, 'outline');
+      expect(store.getStructureRevision()).toBe(r0 + 2);
+
+      store.applyDocOp({ id: 'theme', type: 'setTheme', theme: 'mono' }, 'outline');
+      expect(store.getStructureRevision()).toBe(r0 + 3);
+
+      store.applyDocOp({ id: 'mv', type: 'moveNode', nodeId: 'a', newParentId: 'b', index: 0 }, 'outline');
+      expect(store.getStructureRevision()).toBe(r0 + 4);
+
+      store.applyDocOp({ id: 'del', type: 'deleteSubtree', nodeId: 'a' }, 'outline');
+      expect(store.getStructureRevision()).toBe(r0 + 5);
+    });
+
+    it('subscribeStructure does not fire on a content-only apply', () => {
+      const doc = withNode(createEmptyDoc({ title: 'Root', now: 0 }), 'a', 'A', 'root');
+      const store = createCoreStore(doc);
+      let calls = 0;
+      const unsubscribe = store.subscribeStructure(() => {
+        calls += 1;
+      });
+
+      store.applyDocOp({ id: 'u', type: 'updateContent', nodeId: 'a', content: createTextDoc('AA') }, 'outline');
+      store.applyDocOp({ id: 'theme', type: 'setTheme', theme: 'mono' }, 'outline');
+      store.applyDocOp({ id: 'u2', type: 'updateContent', nodeId: 'a', content: createTextDoc('AAA') }, 'outline');
+      unsubscribe();
+
+      expect(calls).toBe(1);
+    });
+  });
+
   describe('history merge', () => {
     beforeEach(() => {
       vi.useFakeTimers();

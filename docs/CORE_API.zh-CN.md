@@ -211,6 +211,10 @@ selectEdgesForNode(doc, nodeId)
 interface CoreStore {
   getDoc(): Doc;
   subscribe(fn: () => void): Unsubscribe;
+  subscribeStructure(fn: () => void): Unsubscribe;
+  getStructureRevision(): number;
+  canUndo(): boolean;
+  canRedo(): boolean;
   applyDocOp(op: DocOperation, origin: OpOrigin): ApplyResult;
   applyDocTransaction(ops: DocOperation[], origin: OpOrigin): ApplyResult;
   undo(scope?: 'local' | 'global'): ApplyResult;
@@ -228,9 +232,15 @@ interface CoreStore {
 - `createCoreStore(initialDoc)` 构造时会跑一次 `validateDoc(initialDoc)`，失败抛错；后续 `applyDoc*` 调用都走 `skipInputValidation: true`。
 - 失败的 op 不会推进 `revision`，也不会触发 `subscribe` 回调（doc 引用未变）。
 
-注意：v0.1-spike 阶段允许「App 通过 `useSyncExternalStore(subscribe, getDoc)` 订阅整份 doc」作为 dual-source-of-truth 的替代方案，
-但这并不是终态——v0.1-release 之前应该把 OutlinePane / SpikeCanvas 的子组件改成 `subscribeNode` 风格的 slice 订阅。详见
-[STATE_MODEL §8](./STATE_MODEL.zh-CN.md#8-store-公开访问)。
+合约：
+
+- `subscribeStructure(fn)` 仅在 `structureRevision` 改变时触发——也就是 op 中有 **任一非 `updateContent`** 时。
+  用于 App 顶层订阅，把按键级 keystroke 完全挡在 App 重渲之外。
+- `getStructureRevision()` 是同步快照，配合 `subscribeStructure` 喂给 `useSyncExternalStore`。
+- `canUndo()` / `canRedo()` 是同步 boolean 快照。订阅时建议用 `subscribe(fn)` 全订阅，但通过 `useSyncExternalStore`
+  的 Object.is 比较确保只在 flip 时重渲。
+- v0.1-release 之后，App 走 `subscribeStructure`；`NodeEditorSlot` 走 `subscribeNode(nodeId)`。
+  详见 [STATE_MODEL §8](./STATE_MODEL.zh-CN.md#8-store-公开访问)。
 
 ## 9. Error Model
 

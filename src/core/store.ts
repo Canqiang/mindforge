@@ -25,6 +25,16 @@ interface HistoryEntry {
 interface CoreStoreState {
   doc: Doc;
   revision: number;
+  /**
+   * Bumped on every apply whose ops touch anything other than a single
+   * node's rich-text content — insertNode, deleteSubtree, moveNode,
+   * setCollapsed, updateNodeMeta, setTheme, every free-edge op, plus
+   * undo / redo. App-level subscribers use this as their useMemo /
+   * useSyncExternalStore key so they re-render only when something
+   * the layout, the outline shape, or the document chrome cares about
+   * changed — content-only edits flow through subscribeNode instead.
+   */
+  structureRevision: number;
   undoStack: HistoryEntry[];
   redoStack: HistoryEntry[];
   /**
@@ -43,6 +53,14 @@ export interface CoreStore {
    * style consumption — does NOT fire on subscribe.
    */
   subscribe(fn: () => void): Unsubscribe;
+  /**
+   * Subscribe ONLY to structure / non-content mutations. Content-only
+   * keystrokes (single-node updateContent ops) won't fire this callback,
+   * so an App-level subscriber doesn't re-render on every character. Pair
+   * with `getStructureRevision` for `useSyncExternalStore`.
+   */
+  subscribeStructure(fn: () => void): Unsubscribe;
+  getStructureRevision(): number;
   /**
    * Synchronous read of whether an entry is available on the undo / redo
    * stack. Both flip together with `doc` identity on every successful apply,
@@ -69,10 +87,14 @@ export function createCoreStore(initialDoc: Doc): CoreStore {
   const store = createStore<CoreStoreState>(() => ({
     doc: initialDoc,
     revision: 0,
+    structureRevision: 0,
     undoStack: [],
     redoStack: [],
     blockMerge: false
   }));
+
+  const opsAffectStructure = (ops: DocOperation[]): boolean =>
+    ops.some((op) => op.type !== 'updateContent');
 
   const applyTransaction = (ops: DocOperation[], origin: OpOrigin, recordHistory: boolean): ApplyResult => {
     const state = store.getState();
@@ -100,12 +122,15 @@ export function createCoreStore(initialDoc: Doc): CoreStore {
       timestamp
     };
 
+    const structural = opsAffectStructure(ops);
+
     store.setState((current) => {
       if (!recordHistory) {
         return {
           ...current,
           doc: result.doc!,
-          revision: current.revision + 1
+          revision: current.revision + 1,
+          structureRevision: structural ? current.structureRevision + 1 : current.structureRevision
         };
       }
       const previous = current.blockMerge ? undefined : current.undoStack.at(-1);
@@ -117,6 +142,7 @@ export function createCoreStore(initialDoc: Doc): CoreStore {
         ...current,
         doc: result.doc!,
         revision: current.revision + 1,
+        structureRevision: structural ? current.structureRevision + 1 : current.structureRevision,
         undoStack: nextUndoStack,
         redoStack: [],
         blockMerge: false
@@ -136,6 +162,16 @@ export function createCoreStore(initialDoc: Doc): CoreStore {
           fn();
         }
       });
+    },
+    subscribeStructure(fn) {
+      return store.subscribe((state, prev) => {
+        if (state.structureRevision !== prev.structureRevision) {
+          fn();
+        }
+      });
+    },
+    getStructureRevision() {
+      return store.getState().structureRevision;
     },
     canUndo() {
       return store.getState().undoStack.length > 0;
@@ -171,10 +207,12 @@ export function createCoreStore(initialDoc: Doc): CoreStore {
         return result;
       }
 
+      const undoStructural = opsAffectStructure(entry.inverseOps);
       store.setState((current) => ({
         ...current,
         doc: result.doc!,
         revision: current.revision + 1,
+        structureRevision: undoStructural ? current.structureRevision + 1 : current.structureRevision,
         undoStack: current.undoStack.slice(0, -1),
         redoStack: [...current.redoStack, entry],
         blockMerge: true
@@ -204,10 +242,12 @@ export function createCoreStore(initialDoc: Doc): CoreStore {
         return result;
       }
 
+      const redoStructural = opsAffectStructure(entry.ops);
       store.setState((current) => ({
         ...current,
         doc: result.doc!,
         revision: current.revision + 1,
+        structureRevision: redoStructural ? current.structureRevision + 1 : current.structureRevision,
         undoStack: [...current.undoStack, entry],
         redoStack: current.redoStack.slice(0, -1),
         blockMerge: true

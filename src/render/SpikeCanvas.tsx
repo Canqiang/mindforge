@@ -342,7 +342,6 @@ export function SpikeCanvas({
               {node ? (
                 <NodeEditorSlot
                   nodeId={layoutNode.id}
-                  content={node.content}
                   surface="canvas"
                   active={activeNodeId === layoutNode.id}
                   mirroredSelection={mirroredSelection}

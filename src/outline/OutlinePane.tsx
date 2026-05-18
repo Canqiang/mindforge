@@ -133,7 +133,6 @@ const OutlineNodeRow = memo(function OutlineNodeRow({
         )}
         <NodeEditorSlot
           nodeId={node.id}
-          content={node.content}
           surface="outline"
           active={active}
           mirroredSelection={mirroredSelection}

@@ -1,10 +1,10 @@
 import { getPlainText, type NodeId, type RichText } from '../core';
+import { useNode } from '../core-context';
 import { NodeEditor, type StructuralKeyEvent } from './NodeEditor';
 import { shouldMirrorSelection, type EditorSurface, type TextSelectionMirror } from './selection';
 
 interface NodeEditorSlotProps {
   nodeId: NodeId;
-  content: RichText;
   surface: EditorSurface;
   active: boolean;
   mirroredSelection: TextSelectionMirror | null;
@@ -18,7 +18,6 @@ interface NodeEditorSlotProps {
 
 export function NodeEditorSlot({
   nodeId,
-  content,
   surface,
   active,
   mirroredSelection,
@@ -29,6 +28,12 @@ export function NodeEditorSlot({
   onSelectionChange,
   onStructuralKey
 }: NodeEditorSlotProps) {
+  // Slice subscription: the slot re-renders when THIS node's content
+  // changes — even when the App / OutlinePane / SpikeCanvas don't, because
+  // updateContent ops don't bump the structureRevision they listen to.
+  const node = useNode(nodeId);
+  if (!node) return null;
+  const content = node.content;
   const isMirrored = shouldMirrorSelection(mirroredSelection, nodeId, surface);
   const plainText = getPlainText(content) || 'Untitled';
 
