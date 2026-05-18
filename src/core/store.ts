@@ -5,6 +5,15 @@ import { validateDoc } from './validation';
 
 const EMPTY_CHILD_IDS: NodeId[] = Object.freeze([] as NodeId[]) as NodeId[];
 
+/**
+ * Window in milliseconds within which two consecutive updateContent ops on
+ * the same node from the same origin are collapsed into a single history
+ * entry. Picked to feel like "one logical edit" — a sentence, a word — not
+ * a single keystroke. Pause longer than this and the next edit becomes its
+ * own undo step.
+ */
+const MERGE_WINDOW_MS = 600;
+
 interface HistoryEntry {
   label: string;
   origin: OpOrigin;
@@ -18,6 +27,12 @@ interface CoreStoreState {
   revision: number;
   undoStack: HistoryEntry[];
   redoStack: HistoryEntry[];
+  /**
+   * Set to true after every undo / redo so the next normal apply forces a
+   * fresh history entry instead of merging with the entry the user just
+   * stepped through. Cleared after the next apply that records history.
+   */
+  blockMerge: boolean;
 }
 
 export interface CoreStore {
@@ -55,7 +70,8 @@ export function createCoreStore(initialDoc: Doc): CoreStore {
     doc: initialDoc,
     revision: 0,
     undoStack: [],
-    redoStack: []
+    redoStack: [],
+    blockMerge: false
   }));
 
   const applyTransaction = (ops: DocOperation[], origin: OpOrigin, recordHistory: boolean): ApplyResult => {
@@ -84,12 +100,28 @@ export function createCoreStore(initialDoc: Doc): CoreStore {
       timestamp
     };
 
-    store.setState((current) => ({
-      doc: result.doc!,
-      revision: current.revision + 1,
-      undoStack: recordHistory ? [...current.undoStack, entry] : current.undoStack,
-      redoStack: recordHistory ? [] : current.redoStack
-    }));
+    store.setState((current) => {
+      if (!recordHistory) {
+        return {
+          ...current,
+          doc: result.doc!,
+          revision: current.revision + 1
+        };
+      }
+      const previous = current.blockMerge ? undefined : current.undoStack.at(-1);
+      const merged = mergeContinuousUpdateContent(previous, entry);
+      const nextUndoStack = merged
+        ? [...current.undoStack.slice(0, -1), merged]
+        : [...current.undoStack, entry];
+      return {
+        ...current,
+        doc: result.doc!,
+        revision: current.revision + 1,
+        undoStack: nextUndoStack,
+        redoStack: [],
+        blockMerge: false
+      };
+    });
 
     return result;
   };
@@ -140,10 +172,12 @@ export function createCoreStore(initialDoc: Doc): CoreStore {
       }
 
       store.setState((current) => ({
+        ...current,
         doc: result.doc!,
         revision: current.revision + 1,
         undoStack: current.undoStack.slice(0, -1),
-        redoStack: [...current.redoStack, entry]
+        redoStack: [...current.redoStack, entry],
+        blockMerge: true
       }));
 
       return result;
@@ -171,10 +205,12 @@ export function createCoreStore(initialDoc: Doc): CoreStore {
       }
 
       store.setState((current) => ({
+        ...current,
         doc: result.doc!,
         revision: current.revision + 1,
         undoStack: [...current.undoStack, entry],
-        redoStack: current.redoStack.slice(0, -1)
+        redoStack: current.redoStack.slice(0, -1),
+        blockMerge: true
       }));
 
       return result;
@@ -201,5 +237,34 @@ export function createCoreStore(initialDoc: Doc): CoreStore {
         }
       });
     }
+  };
+}
+
+/**
+ * Coalesce a fresh updateContent entry with the immediately preceding entry
+ * when they target the same node from the same origin within MERGE_WINDOW_MS.
+ *
+ * The merged entry keeps the EARLIEST inverse so a single Cmd-Z undoes the
+ * whole burst, and adopts the LATEST forward op so redo / debug labels point
+ * at the most recent state. Returns null when nothing should merge.
+ */
+function mergeContinuousUpdateContent(
+  previous: HistoryEntry | undefined,
+  incoming: HistoryEntry
+): HistoryEntry | null {
+  if (!previous) return null;
+  if (previous.origin !== incoming.origin) return null;
+  if (incoming.timestamp - previous.timestamp > MERGE_WINDOW_MS) return null;
+  if (previous.ops.length !== 1 || incoming.ops.length !== 1) return null;
+  const prevOp = previous.ops[0];
+  const newOp = incoming.ops[0];
+  if (prevOp.type !== 'updateContent' || newOp.type !== 'updateContent') return null;
+  if (prevOp.nodeId !== newOp.nodeId) return null;
+  return {
+    label: incoming.label,
+    origin: incoming.origin,
+    ops: [newOp],
+    inverseOps: previous.inverseOps,
+    timestamp: incoming.timestamp
   };
 }

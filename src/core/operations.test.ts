@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { applyDocOp, applyDocTransaction, createCoreStore, createEmptyDoc, createTextDoc, getPlainText, repairDoc, richTextSignature, validateDoc } from './index';
 import type { ApplyContext, Doc, DocOperation, RichText } from './types';
 
@@ -460,6 +460,123 @@ describe('core doc operations', () => {
     expect(store.canRedo()).toBe(true);
     store.applyDocOp({ id: 'theme-mini', type: 'setTheme', theme: 'minimal' }, 'test');
     expect(store.canRedo()).toBe(false);
+  });
+
+  describe('history merge', () => {
+    beforeEach(() => {
+      vi.useFakeTimers();
+      vi.setSystemTime(new Date(1000));
+    });
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    it('collapses consecutive updateContent on the same node into one undo step', () => {
+      const doc = withNode(createEmptyDoc({ title: 'Root', now: 0 }), 'a', 'A', 'root');
+      const store = createCoreStore(doc);
+
+      vi.setSystemTime(new Date(2000));
+      store.applyDocOp({ id: 'u1', type: 'updateContent', nodeId: 'a', content: createTextDoc('AB') }, 'outline');
+      vi.setSystemTime(new Date(2200));
+      store.applyDocOp({ id: 'u2', type: 'updateContent', nodeId: 'a', content: createTextDoc('ABC') }, 'outline');
+      vi.setSystemTime(new Date(2400));
+      store.applyDocOp({ id: 'u3', type: 'updateContent', nodeId: 'a', content: createTextDoc('ABCD') }, 'outline');
+
+      expect(getPlainText(store.getDoc().nodes.a.content)).toBe('ABCD');
+
+      store.undo();
+      // Single undo walks all the way back to the pre-burst state.
+      expect(getPlainText(store.getDoc().nodes.a.content)).toBe('A');
+      expect(store.canUndo()).toBe(false);
+    });
+
+    it('starts a fresh entry once the merge window has elapsed', () => {
+      const doc = withNode(createEmptyDoc({ title: 'Root', now: 0 }), 'a', 'A', 'root');
+      const store = createCoreStore(doc);
+
+      vi.setSystemTime(new Date(2000));
+      store.applyDocOp({ id: 'u1', type: 'updateContent', nodeId: 'a', content: createTextDoc('AB') }, 'outline');
+      // Wait long enough to fall outside the merge window.
+      vi.setSystemTime(new Date(5000));
+      store.applyDocOp({ id: 'u2', type: 'updateContent', nodeId: 'a', content: createTextDoc('ABC') }, 'outline');
+
+      store.undo();
+      expect(getPlainText(store.getDoc().nodes.a.content)).toBe('AB');
+      store.undo();
+      expect(getPlainText(store.getDoc().nodes.a.content)).toBe('A');
+    });
+
+    it('does not merge updateContent across different nodes', () => {
+      let doc = withNode(createEmptyDoc({ title: 'Root', now: 0 }), 'a', 'A', 'root');
+      doc = withNode(doc, 'b', 'B', 'root');
+      const store = createCoreStore(doc);
+
+      vi.setSystemTime(new Date(2000));
+      store.applyDocOp({ id: 'u-a', type: 'updateContent', nodeId: 'a', content: createTextDoc('AA') }, 'outline');
+      vi.setSystemTime(new Date(2200));
+      store.applyDocOp({ id: 'u-b', type: 'updateContent', nodeId: 'b', content: createTextDoc('BB') }, 'outline');
+
+      store.undo();
+      expect(getPlainText(store.getDoc().nodes.b.content)).toBe('B');
+      expect(getPlainText(store.getDoc().nodes.a.content)).toBe('AA');
+      store.undo();
+      expect(getPlainText(store.getDoc().nodes.a.content)).toBe('A');
+    });
+
+    it('does not merge updateContent across origins (outline vs canvas)', () => {
+      const doc = withNode(createEmptyDoc({ title: 'Root', now: 0 }), 'a', 'A', 'root');
+      const store = createCoreStore(doc);
+
+      vi.setSystemTime(new Date(2000));
+      store.applyDocOp({ id: 'u-outline', type: 'updateContent', nodeId: 'a', content: createTextDoc('AB') }, 'outline');
+      vi.setSystemTime(new Date(2200));
+      store.applyDocOp({ id: 'u-canvas', type: 'updateContent', nodeId: 'a', content: createTextDoc('ABC') }, 'canvas');
+
+      store.undo();
+      expect(getPlainText(store.getDoc().nodes.a.content)).toBe('AB');
+      store.undo();
+      expect(getPlainText(store.getDoc().nodes.a.content)).toBe('A');
+    });
+
+    it('does not merge updateContent with a different op type', () => {
+      const doc = withNode(createEmptyDoc({ title: 'Root', now: 0 }), 'a', 'A', 'root');
+      const store = createCoreStore(doc);
+
+      vi.setSystemTime(new Date(2000));
+      store.applyDocOp({ id: 'u-1', type: 'updateContent', nodeId: 'a', content: createTextDoc('AB') }, 'outline');
+      vi.setSystemTime(new Date(2200));
+      store.applyDocOp({ id: 'theme', type: 'setTheme', theme: 'mono' }, 'outline');
+      vi.setSystemTime(new Date(2400));
+      store.applyDocOp({ id: 'u-2', type: 'updateContent', nodeId: 'a', content: createTextDoc('ABC') }, 'outline');
+
+      // Three distinct entries — three undos to reach the start.
+      store.undo();
+      expect(getPlainText(store.getDoc().nodes.a.content)).toBe('AB');
+      store.undo();
+      expect(store.getDoc().theme).toBe('default');
+      store.undo();
+      expect(getPlainText(store.getDoc().nodes.a.content)).toBe('A');
+    });
+
+    it('does not merge after a redo splits the timeline', () => {
+      const doc = withNode(createEmptyDoc({ title: 'Root', now: 0 }), 'a', 'A', 'root');
+      const store = createCoreStore(doc);
+
+      vi.setSystemTime(new Date(2000));
+      store.applyDocOp({ id: 'u-1', type: 'updateContent', nodeId: 'a', content: createTextDoc('AB') }, 'outline');
+      store.undo();
+      // Redo brings the old entry back with its old timestamp.
+      store.redo();
+      // Even a fast follow-up edit should NOT merge with the redone entry —
+      // the redo is a deliberate boundary in the user's intent.
+      vi.setSystemTime(new Date(2100));
+      store.applyDocOp({ id: 'u-2', type: 'updateContent', nodeId: 'a', content: createTextDoc('ABC') }, 'outline');
+
+      store.undo();
+      expect(getPlainText(store.getDoc().nodes.a.content)).toBe('AB');
+      store.undo();
+      expect(getPlainText(store.getDoc().nodes.a.content)).toBe('A');
+    });
   });
 
   it('repairDoc cannot fix a missing rootId and surfaces the issue', () => {
