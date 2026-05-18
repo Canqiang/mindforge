@@ -118,6 +118,34 @@ test('backspace on an empty node deletes it and refocuses the prior row', async 
   await expect(page.getByLabel('Outline editor for Anchor')).toBeVisible();
 });
 
+test('exporting downloads a .mindforge.json file', async ({ page }) => {
+  const downloadPromise = page.waitForEvent('download');
+  await page.getByRole('button', { name: 'Export document as JSON' }).click();
+  const download = await downloadPromise;
+  expect(download.suggestedFilename().endsWith('.mindforge.json')).toBe(true);
+});
+
+test('importing replaces the document and clears history', async ({ page }) => {
+  // 1. Read the current seed doc by exporting first.
+  const downloadPromise = page.waitForEvent('download');
+  await page.getByRole('button', { name: 'Export document as JSON' }).click();
+  const download = await downloadPromise;
+  const exportedPath = await download.path();
+  expect(exportedPath).not.toBeNull();
+
+  // 2. Mutate the doc visibly (switch theme so it'll roundtrip differently).
+  await page.getByLabel('Theme').selectOption('mono');
+  await expect(page.locator('html')).toHaveAttribute('data-theme', 'mono');
+
+  // 3. Import the exported file — the document should revert to the seed
+  //    theme, and the undo button should be disabled because import resets
+  //    the history stack on the new store.
+  const importInput = page.locator('input[type="file"]');
+  await importInput.setInputFiles(exportedPath!);
+  await expect(page.locator('html')).toHaveAttribute('data-theme', 'default');
+  await expect(page.getByRole('button', { name: 'Undo' })).toBeDisabled();
+});
+
 test('cmd/ctrl-z undoes a theme switch and cmd-shift-z redoes it', async ({ page }) => {
   const html = page.locator('html');
   await expect(html).toHaveAttribute('data-theme', 'default');

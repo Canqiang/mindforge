@@ -77,6 +77,40 @@ textarea {
   overflow: auto;
 }
 
+.outline-pane-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+
+.outline-pane-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.outline-pane-action {
+  padding: 4px 10px;
+  border: 1px solid var(--mf-border);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--mf-muted);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+
+.outline-pane-action:hover,
+.outline-pane-action:focus-visible {
+  border-color: var(--mf-accent);
+  color: var(--mf-accent);
+  outline: none;
+}
+
 .outline-node {
   --outline-depth: 0;
   margin-top: 8px;

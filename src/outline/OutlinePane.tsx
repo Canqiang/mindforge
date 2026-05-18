@@ -1,4 +1,4 @@
-import { memo, useMemo, type CSSProperties } from 'react';
+import { memo, useMemo, useRef, type CSSProperties } from 'react';
 import { getPlainText, type Doc, type MindNode, type NodeId, type RichText } from '../core';
 import type { StructuralKeyEvent } from '../editor/NodeEditor';
 import { NodeEditorSlot } from '../editor/NodeEditorSlot';
@@ -13,6 +13,8 @@ interface OutlinePaneProps {
   onSelectionChange: (selection: TextSelectionMirror) => void;
   onToggleCollapsed: (nodeId: NodeId, next: boolean) => void;
   onStructuralKey: (event: StructuralKeyEvent) => void;
+  onExport: () => void;
+  onImport: (file: File) => void;
 }
 
 interface OutlineRow {
@@ -20,12 +22,44 @@ interface OutlineRow {
   depth: number;
 }
 
-export function OutlinePane({ doc, activeNodeId, mirroredSelection, onActivateEditor, onContentChange, onSelectionChange, onToggleCollapsed, onStructuralKey }: OutlinePaneProps) {
+export function OutlinePane({ doc, activeNodeId, mirroredSelection, onActivateEditor, onContentChange, onSelectionChange, onToggleCollapsed, onStructuralKey, onExport, onImport }: OutlinePaneProps) {
   const rows = useMemo(() => flattenOutlineRows(doc), [doc]);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   return (
     <aside className="outline-pane">
-      <div className="pane-label">Spike outline bridge</div>
+      <div className="outline-pane-header">
+        <div className="pane-label">Spike outline bridge</div>
+        <div className="outline-pane-actions" role="toolbar" aria-label="Document file actions">
+          <button
+            type="button"
+            className="outline-pane-action"
+            onClick={onExport}
+            aria-label="Export document as JSON"
+          >
+            Export
+          </button>
+          <button
+            type="button"
+            className="outline-pane-action"
+            onClick={() => fileInputRef.current?.click()}
+            aria-label="Import document from JSON file"
+          >
+            Import
+          </button>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".json,application/json"
+            hidden
+            onChange={(event) => {
+              const file = event.target.files?.[0];
+              event.target.value = '';
+              if (file) onImport(file);
+            }}
+          />
+        </div>
+      </div>
       {rows.map((row) => {
         const node = doc.nodes[row.nodeId];
         if (!node) {

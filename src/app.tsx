@@ -2,7 +2,13 @@ import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore
 import { createCoreStore, createTextDoc, validateDoc, type CoreStore, type Doc, type DocOperation, type NodeId, type RichText } from './core';
 import type { StructuralKeyEvent } from './editor/NodeEditor';
 import type { EditorSurface, TextSelectionMirror } from './editor/selection';
-import { loadStoredDoc, subscribeStorePersistence } from './io';
+import {
+  exportDocToBlob,
+  loadStoredDoc,
+  parseDocFromText,
+  subscribeStorePersistence,
+  suggestDocFilename
+} from './io';
 import { computeSimpleMindMapLayout } from './layout';
 import { OutlinePane } from './outline/OutlinePane';
 import { SpikeCanvas } from './render/SpikeCanvas';
@@ -328,6 +334,55 @@ export function App() {
     }
   }, [runtime.store]);
 
+  const handleExport = useCallback(() => {
+    if (typeof document === 'undefined') return;
+    const currentDoc = runtime.store.getDoc();
+    const blob = exportDocToBlob(currentDoc);
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.download = suggestDocFilename(currentDoc);
+    document.body.appendChild(anchor);
+    anchor.click();
+    document.body.removeChild(anchor);
+    // Free the blob URL on next tick so the download has time to start.
+    setTimeout(() => URL.revokeObjectURL(url), 0);
+  }, [runtime.store]);
+
+  const handleImport = useCallback(
+    async (file: File) => {
+      let text: string;
+      try {
+        text = await file.text();
+      } catch (error) {
+        setLastError(`Failed to read file: ${error instanceof Error ? error.message : String(error)}`);
+        return;
+      }
+      const result = parseDocFromText(text);
+      if (!result.ok) {
+        setLastError(`${result.error.code}: ${result.error.message}`);
+        return;
+      }
+
+      try {
+        const nextStore = createCoreStore(result.data.doc);
+        mountStartRef.current = performance.now();
+        setBenchmarkReady(false);
+        setRuntime({ store: nextStore, fixtureName: 'imported', isFixture: false });
+        setSelectionMirror(null);
+        setActiveEditors({ outline: null, canvas: null });
+        if (result.data.warnings.length > 0) {
+          setLastError(result.data.warnings.join(' / '));
+        } else {
+          setLastError(null);
+        }
+      } catch (error) {
+        setLastError(`Imported doc rejected: ${error instanceof Error ? error.message : String(error)}`);
+      }
+    },
+    []
+  );
+
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       // Cmd (macOS) or Ctrl (others) only. Reject events where neither is set,
@@ -371,6 +426,8 @@ export function App() {
         onSelectionChange={handleSelectionChange}
         onToggleCollapsed={handleToggleCollapsed}
         onStructuralKey={handleStructuralKey}
+        onExport={handleExport}
+        onImport={handleImport}
       />
       <section className="canvas-pane">
         <SpikeCanvas
